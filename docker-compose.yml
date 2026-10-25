@@ -1,0 +1,13 @@
+services:
+  rag:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data          # 数据库、向量库、embedding 模型缓存
+    environment:
+      # 可选：Claude 的 key 也可以在网页的“模型与设置”里填
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # 网络访问不了 HuggingFace 时可以设置镜像，例如 https://hf-mirror.com
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
+    restart: unless-stopped
