@@ -182,3 +182,8 @@ table.sim th { font-weight: normal; color: var(--muted); text-align: left; max-w
 .local-chip { background: var(--primary-soft); color: var(--text); border: 1px solid var(--primary); border-radius: 999px; padding: 3px 10px; font-size: 13px; cursor: pointer; }
 .local-chip:hover { background: var(--primary); color: #fff; }
 .card.add { flex-direction: column; gap: 4px; }
+
+/* 语言切换 */
+.lang-switch { display: flex; gap: 4px; margin-top: 12px; }
+.lang-switch button { flex: 1; background: transparent; color: inherit; opacity: 0.6; border: 1px solid rgba(255, 255, 255, 0.25); padding: 4px 8px; font-size: 12px; }
+.lang-switch button.active { opacity: 1; background: rgba(255, 255, 255, 0.15); }

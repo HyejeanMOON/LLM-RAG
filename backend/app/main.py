@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config, db
+from .i18n import LanguageMiddleware
 from .routers import chat, documents, providers, system
 from .services import providers as provider_svc
 from .services import documents as document_svc
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="RAG 知识库问答", lifespan=lifespan)
+app.add_middleware(LanguageMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ORIGINS,

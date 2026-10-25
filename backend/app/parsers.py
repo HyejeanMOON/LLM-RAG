@@ -1,6 +1,8 @@
 """把上传的文件转成纯文本。支持 .md .txt .pdf .docx"""
 import io
 
+from .i18n import t
+
 SUPPORTED = {".md", ".markdown", ".txt", ".pdf", ".docx"}
 
 
@@ -12,7 +14,10 @@ def extract_text(filename: str, data: bytes) -> tuple[str, str]:
     """返回 (纯文本, 文件类型)。"""
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if ext not in SUPPORTED:
-        raise UnsupportedFile(f"不支持的文件类型：{ext or '无扩展名'}，支持 {', '.join(sorted(SUPPORTED))}")
+        raise UnsupportedFile(t(
+            f"不支持的文件类型：{ext or '无扩展名'}，支持 {', '.join(sorted(SUPPORTED))}",
+            f"Unsupported file type: {ext or 'no extension'}. Supported: {', '.join(sorted(SUPPORTED))}",
+        ))
 
     if ext == ".pdf":
         from pypdf import PdfReader
@@ -37,7 +42,7 @@ def extract_text(filename: str, data: bytes) -> tuple[str, str]:
 
     text = text.strip()
     if not text:
-        raise UnsupportedFile("没有从文件中提取到文字（扫描版 PDF 需要先做 OCR）")
+        raise UnsupportedFile(t("没有从文件中提取到文字（扫描版 PDF 需要先做 OCR）", "No text could be extracted (scanned PDFs need OCR first)"))
     return text, ext.lstrip(".")
 
 

@@ -1,4 +1,5 @@
 // 后端接口的类型和调用封装
+import { getLang, t } from "./i18n";
 
 export type ChunkStrategy = "structure" | "fixed" | "paragraph" | "recursive" | "semantic";
 export interface ChunkingParams {
@@ -215,7 +216,11 @@ export interface ChatTurn {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
-    headers: init?.body instanceof FormData ? init.headers : { "Content-Type": "application/json", ...init?.headers },
+    // Accept-Language 让后端用同一种语言返回错误信息
+    headers:
+      init?.body instanceof FormData
+        ? { "Accept-Language": getLang(), ...init.headers }
+        : { "Content-Type": "application/json", "Accept-Language": getLang(), ...init?.headers },
   });
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
@@ -303,12 +308,12 @@ export async function streamChat(
 ) {
   const res = await fetch("/api/chat", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Accept-Language": getLang() },
     body: JSON.stringify(body),
     signal,
   });
   if (!res.ok || !res.body) {
-    handlers.onError(`请求失败：${res.status}`);
+    handlers.onError(t(`请求失败：${res.status}`, `Request failed: ${res.status}`));
     return;
   }
   const reader = res.body.getReader();
@@ -342,5 +347,5 @@ export async function streamChat(
       }
     }
   }
-  if (!finished) handlers.onError("连接意外中断");
+  if (!finished) handlers.onError(t("连接意外中断", "Connection closed unexpectedly"));
 }

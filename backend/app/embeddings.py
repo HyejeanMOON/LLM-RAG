@@ -21,14 +21,22 @@ Backend = Literal["fastembed", "openai", "hash"]
 
 # 前端下拉框里的常用模型（也可以手动填写任何 fastembed 支持的模型名）
 FASTEMBED_MODELS = [
-    {"model": "BAAI/bge-small-zh-v1.5", "dim": 512, "size": "90MB", "lang": "中文", "note": "中文小模型，速度快，默认"},
-    {"model": "jinaai/jina-embeddings-v2-base-zh", "dim": 768, "size": "640MB", "lang": "中英", "note": "中英混合，支持 8192 token 长文本"},
-    {"model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "dim": 384, "size": "220MB", "lang": "多语言", "note": "50 种语言，小而快"},
-    {"model": "intfloat/multilingual-e5-large", "dim": 1024, "size": "2.2GB", "lang": "多语言", "note": "效果好但大，需要 query:/passage: 前缀（已自动处理）"},
-    {"model": "Qwen/Qwen3-Embedding-0.6B-Q", "dim": 1024, "size": "1.1GB", "lang": "多语言", "note": "通义千问向量模型（量化版），支持 32K token"},
-    {"model": "jinaai/jina-embeddings-v3", "dim": 1024, "size": "2.3GB", "lang": "多语言", "note": "多语言、多任务"},
-    {"model": "minishlab/potion-multilingual-128M", "dim": 256, "size": "510MB", "lang": "多语言", "note": "静态词向量模型，极快但效果一般"},
-    {"model": "BAAI/bge-small-en-v1.5", "dim": 384, "size": "67MB", "lang": "英文", "note": "英文小模型"},
+    {"model": "BAAI/bge-small-zh-v1.5", "dim": 512, "size": "90MB", "lang": "中文", "note": "中文小模型，速度快，默认",
+     "lang_en": "Chinese", "note_en": "Small Chinese model, fast, default"},
+    {"model": "jinaai/jina-embeddings-v2-base-zh", "dim": 768, "size": "640MB", "lang": "中英", "note": "中英混合，支持 8192 token 长文本",
+     "lang_en": "Chinese + English", "note_en": "Mixed Chinese/English, 8192-token inputs"},
+    {"model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "dim": 384, "size": "220MB", "lang": "多语言", "note": "50 种语言，小而快",
+     "lang_en": "Multilingual", "note_en": "50 languages, small and fast"},
+    {"model": "intfloat/multilingual-e5-large", "dim": 1024, "size": "2.2GB", "lang": "多语言", "note": "效果好但大，需要 query:/passage: 前缀（已自动处理）",
+     "lang_en": "Multilingual", "note_en": "Strong but large; needs query:/passage: prefixes (handled automatically)"},
+    {"model": "Qwen/Qwen3-Embedding-0.6B-Q", "dim": 1024, "size": "1.1GB", "lang": "多语言", "note": "通义千问向量模型（量化版），支持 32K token",
+     "lang_en": "Multilingual", "note_en": "Qwen embedding model (quantized), 32K-token inputs"},
+    {"model": "jinaai/jina-embeddings-v3", "dim": 1024, "size": "2.3GB", "lang": "多语言", "note": "多语言、多任务",
+     "lang_en": "Multilingual", "note_en": "Multilingual, multi-task"},
+    {"model": "minishlab/potion-multilingual-128M", "dim": 256, "size": "510MB", "lang": "多语言", "note": "静态词向量模型，极快但效果一般",
+     "lang_en": "Multilingual", "note_en": "Static word-vector model; very fast, average quality"},
+    {"model": "BAAI/bge-small-en-v1.5", "dim": 384, "size": "67MB", "lang": "英文", "note": "英文小模型",
+     "lang_en": "English", "note_en": "Small English model"},
 ]
 
 

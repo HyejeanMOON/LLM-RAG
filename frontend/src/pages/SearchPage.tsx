@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type CompareResult, type DocumentMeta, type Hit, type RetrievalParams } from "../api";
 import StrategyEditor, { DEFAULT_PARAMS, describe } from "../components/StrategyEditor";
+import { t } from "../i18n";
 
 interface Column {
   label: string;
@@ -56,7 +57,7 @@ export default function SearchPage({ version, onChanged }: { version: number; on
   async function makeDefault(p: RetrievalParams) {
     await api.updateSettings({ retrieval: p });
     onChanged();
-    setNotice(`问答默认检索策略已改为：${describe(p)}`);
+    setNotice(t(`问答默认检索策略已改为：${describe(p)}`, `Default retrieval for Chat is now: ${describe(p)}`));
   }
 
   // 每个片段在各策略里的名次，用来显示“其他策略里排第几”
@@ -68,12 +69,12 @@ export default function SearchPage({ version, onChanged }: { version: number; on
         <input
           className="grow"
           value={query}
-          placeholder="输入问题，比较不同检索算法会找到哪些片段"
+          placeholder={t("输入问题，比较不同检索算法会找到哪些片段", "Enter a question to compare which chunks each retrieval method finds")}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && run()}
         />
         <select value={docId} onChange={(e) => setDocId(e.target.value)}>
-          <option value="">全部文档</option>
+          <option value="">{t("全部文档", "All documents")}</option>
           {docs.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
@@ -82,23 +83,24 @@ export default function SearchPage({ version, onChanged }: { version: number; on
         </select>
         {tags.length > 0 && (
           <select value={tag} onChange={(e) => setTag(e.target.value)}>
-            <option value="">全部标签</option>
-            {tags.map((t) => (
-              <option key={t} value={t}>
-                标签：{t}
+            <option value="">{t("全部标签", "All tags")}</option>
+            {tags.map((tg) => (
+              <option key={tg} value={tg}>
+                {t("标签：", "Tag: ")}
+                {tg}
               </option>
             ))}
           </select>
         )}
         <button onClick={run} disabled={busy || !query.trim()}>
-          {busy ? "检索中…" : "对比检索"}
+          {busy ? t("检索中…", "Searching…") : t("对比检索", "Compare")}
         </button>
         <button
           className="secondary"
           disabled={columns.length >= MAX_COLUMNS}
           onClick={() => setColumns((cs) => [...cs, { label: "", params: { ...DEFAULT_PARAMS }, editing: true }])}
         >
-          ＋ 添加策略
+          {t("＋ 添加策略", "＋ Add strategy")}
         </button>
       </div>
       {error && <div className="notice error">{error}</div>}
@@ -118,10 +120,10 @@ export default function SearchPage({ version, onChanged }: { version: number; on
                 />
                 <div className="row small">
                   <button className="link" onClick={() => updateColumn(i, { editing: !c.editing })}>
-                    {c.editing ? "收起参数" : "调整参数"}
+                    {c.editing ? t("收起参数", "Hide params") : t("调整参数", "Edit params")}
                   </button>
                   <button className="link" onClick={() => makeDefault(c.params)}>
-                    设为问答默认
+                    {t("设为问答默认", "Use in Chat")}
                   </button>
                   {columns.length > 1 && (
                     <button
@@ -131,19 +133,22 @@ export default function SearchPage({ version, onChanged }: { version: number; on
                         setResults((rs) => rs && rs.filter((_, j) => j !== i));
                       }}
                     >
-                      删除
+                      {t("删除", "Remove")}
                     </button>
                   )}
                 </div>
                 {c.editing && <StrategyEditor compact value={c.params} onChange={(params) => updateColumn(i, { params })} />}
                 {r && (
                   <div className="muted small">
-                    耗时 {r.elapsed_ms} ms · 打分 {r.searched ?? "-"} 个切片 · {r.hits.length} 个结果
+                    {t(
+                      `耗时 ${r.elapsed_ms} ms · 打分 ${r.searched ?? "-"} 个切片 · ${r.hits.length} 个结果`,
+                      `${r.elapsed_ms} ms · ${r.searched ?? "-"} chunks scored · ${r.hits.length} results`,
+                    )}
                   </div>
                 )}
               </div>
               {r?.error && <div className="notice error">{r.error}</div>}
-              {r && !r.error && r.hits.length === 0 && <p className="muted">没有结果（可能被阈值过滤掉了）</p>}
+              {r && !r.error && r.hits.length === 0 && <p className="muted">{t("没有结果（可能被阈值过滤掉了）", "No results (maybe filtered out by the threshold)")}</p>}
               {r?.hits.map((h, j) => (
                 <HitCard
                   key={chunkKey(h)}
@@ -161,7 +166,10 @@ export default function SearchPage({ version, onChanged }: { version: number; on
       </div>
       {!results && (
         <p className="muted small">
-          提示：把鼠标停在参数名上能看到说明。每个片段会显示所有算法的分数，以及它在其他策略里的排名，方便看出各算法的差别。
+          {t(
+            "提示：把鼠标停在参数名上能看到说明。每个片段会显示所有算法的分数，以及它在其他策略里的排名，方便看出各算法的差别。",
+            "Tip: hover over a parameter name for an explanation. Each chunk shows its score under every algorithm and its rank in the other strategies, so the differences are easy to see.",
+          )}
         </p>
       )}
     </div>
@@ -173,18 +181,18 @@ function HitCard({ hit, rank, params, others }: { hit: Hit; rank: number; params
   // 当前策略实际用来排序的那个分数高亮
   const active = params.use_mmr ? "mmr" : params.use_rerank ? "rerank" : params.method === "hybrid" ? "hybrid" : params.method === "bm25" ? "bm25" : params.metric;
   const items: [string, string, number | undefined][] = [
-    ["cosine", "余弦", s.cosine],
-    ["dot", "点积", s.dot],
-    ["l2", "欧氏距离", s.l2],
+    ["cosine", t("余弦", "cosine"), s.cosine],
+    ["dot", t("点积", "dot"), s.dot],
+    ["l2", t("欧氏距离", "L2"), s.l2],
     ["bm25", "BM25", s.bm25],
-    ["hybrid", "混合", s.hybrid],
-    ["rerank", "重排序", s.rerank],
+    ["hybrid", t("混合", "hybrid"), s.hybrid],
+    ["rerank", t("重排序", "rerank"), s.rerank],
     ["mmr", "MMR", s.mmr],
   ];
   return (
     <div className="chunk hit">
       <div className="source-head">
-        <span className="rank">#{rank}</span> {hit.doc_name} · 切片 {hit.index}
+        <span className="rank">#{rank}</span> {hit.doc_name} · {t("切片", "chunk")} {hit.index}
       </div>
       <div className="score-tags">
         {items
@@ -196,13 +204,18 @@ function HitCard({ hit, rank, params, others }: { hit: Hit; rank: number; params
           ))}
       </div>
       <div className="score-tags">
-        <span className="tag plain">向量排名 {s.vector_rank}</span>
-        <span className="tag plain">BM25 排名 {s.bm25_rank}</span>
+        <span className="tag plain">
+          {t("向量排名", "vector rank")} {s.vector_rank}
+        </span>
+        <span className="tag plain">
+          {t("BM25 排名", "BM25 rank")} {s.bm25_rank}
+        </span>
       </div>
       <div className="hit-text">{hit.text}</div>
       {others.length > 0 && (
         <div className="muted small">
-          其他策略：{others.map((o) => `${o.label} ${o.rank ? `#${o.rank}` : "未入选"}`).join("；")}
+          {t("其他策略：", "Other strategies: ")}
+          {others.map((o) => `${o.label} ${o.rank ? `#${o.rank}` : t("未入选", "not selected")}`).join(t("；", "; "))}
         </div>
       )}
     </div>

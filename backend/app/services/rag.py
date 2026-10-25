@@ -13,6 +13,7 @@ from typing import Iterator
 
 from .. import query as q
 from ..context import assemble
+from ..i18n import t
 from ..llm import ProviderConfig, create_llm
 from ..retrieval import retrieve as run_retrieval
 from . import documents, providers, settings
@@ -46,7 +47,7 @@ def build_user_message(question: str, blocks: list[dict], gen) -> str:
     sources = "\n\n".join(
         gen.source_template.format(id=i, doc_name=b["doc_name"], text=b["text"], score=b["score"])
         for i, b in enumerate(blocks, 1)
-    ) or "（没有检索到相关片段）"
+    ) or t("（没有检索到相关片段）", "(no relevant passages found)")
     return gen.user_template.replace("{sources}", sources).replace("{question}", question)
 
 

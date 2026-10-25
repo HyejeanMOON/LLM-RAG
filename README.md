@@ -1,5 +1,7 @@
 # RAG 知识库问答（全栈）
 
+中文 | [English](README.en.md)
+
 上传文档 → 切片 → 向量化 → 存入向量库 → 提问时检索相关片段 → 把片段和问题一起发给 LLM → 流式返回带引用的回答。
 可以在网页上管理文档（上传 / 新建 / 编辑 / 删除）、配置多个 LLM 并随时切换。
 
@@ -33,6 +35,7 @@
 | 问答 | SSE 流式输出；先返回检索到的片段（含相似度），回答里用 [1][2] 标注来源；支持多轮对话、可随时停止 |
 | 检索算法 | 向量检索（余弦 / 点积 / 欧氏距离）、BM25 关键词、混合检索（RRF 排名融合或分数加权）、交叉编码器重排序、MMR 多样性、Top K、余弦相似度阈值，可任意组合 |
 | 检索调试 | 同一个问题用最多 4 种策略并排对比：每个片段显示余弦、点积、欧氏距离、BM25、混合、重排序、MMR 各项分数，以及它在其他策略里的排名；满意的策略一键设为问答默认 |
+| 中英文界面 | 侧边栏底部一键切换中文 / English，所有页面、原理说明、后端错误信息、默认提示词都跟着变；语言记在浏览器里 |
 | RAG 流程页 | 按“切分 → 向量化 → 索引 → 问题处理 → 检索 → 上下文 → 生成”的顺序列出全部参数，每个环节都有原理说明；前三步改了会提示重建索引 |
 
 ## 界面截图
@@ -80,7 +83,7 @@ npm run dev                                           # 打开 http://localhost:
 开发模式下 Vite 会把 `/api` 代理到 8000 端口。执行 `npm run build` 之后，后端会直接托管 `frontend/dist`，只开 8000 端口就行。
 
 首次启动会自动：
-- 导入示例文档 `backend/sample_docs/xinghe_handbook.md`（虚构的员工手册，数字都是编的，用来验证 RAG 是否生效）；
+- 导入示例文档 `backend/sample_docs/xinghe_handbook.md`（虚构的员工手册，数字都是编的，用来验证 RAG 是否生效；同目录下的 `xinghe_handbook.en.md` 是英文版，可以手动上传）；
 - 添加一个 Claude Opus 5.5 的模型配置。到“LLM 模型”里填 API Key，或者启动前设置环境变量 `ANTHROPIC_API_KEY`。
 
 可以试着问：“出差住在上海每晚最多能报销多少？”“年假没休完能留到什么时候？”“公司的股票代码是多少？”（文档里没有，模型应该回答没找到）。
@@ -209,6 +212,7 @@ Ollama 装好后会在后台运行，默认地址 `http://localhost:11434`。
 backend/
   app/
     main.py              FastAPI 入口，启动时建表、导入示例文档，托管前端
+    i18n.py              按请求头 Accept-Language 返回中文 / 英文
     config.py            路径和环境变量
     db.py                SQLite（文档原文、模型配置、设置）
     parsers.py           md / txt / pdf / docx → 纯文本
@@ -224,6 +228,7 @@ backend/
   sample_docs/           示例文档
 frontend/
   src/api.ts             接口封装 + SSE 解析
+  src/i18n.ts            中英文切换：t("中文", "English")
   src/pages/             ChatPage / DocumentsPage / SearchPage / SettingsPage
 ```
 

@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from .i18n import t
+
 
 class ChunkingOptions(BaseModel):
     strategy: Literal["structure", "fixed", "paragraph", "recursive", "semantic"] | None = None
@@ -13,7 +15,7 @@ class ChunkingOptions(BaseModel):
     @model_validator(mode="after")
     def _overlap_lt_size(self):
         if self.chunk_size is not None and self.chunk_overlap is not None and self.chunk_overlap >= self.chunk_size:
-            raise ValueError("重叠长度必须小于切片长度")
+            raise ValueError(t("重叠长度必须小于切片长度", "Overlap must be smaller than the chunk size"))
         return self
 
 
@@ -149,11 +151,11 @@ class GenerationOptions(BaseModel):
     @model_validator(mode="after")
     def _templates(self):
         if self.user_template is not None and "{sources}" not in self.user_template:
-            raise ValueError("用户消息模板里必须包含 {sources}")
+            raise ValueError(t("用户消息模板里必须包含 {sources}", "The user template must contain {sources}"))
         if self.user_template is not None and "{question}" not in self.user_template:
-            raise ValueError("用户消息模板里必须包含 {question}")
+            raise ValueError(t("用户消息模板里必须包含 {question}", "The user template must contain {question}"))
         if self.source_template is not None and "{text}" not in self.source_template:
-            raise ValueError("片段模板里必须包含 {text}")
+            raise ValueError(t("片段模板里必须包含 {text}", "The source template must contain {text}"))
         return self
 
 

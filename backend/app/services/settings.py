@@ -10,6 +10,7 @@ from .. import config, db
 from ..chunker import ChunkingParams
 from ..context import ContextParams
 from ..embeddings import EmbeddingConfig, get_embedder
+from ..i18n import get_lang, t
 from ..query import QueryParams
 from ..retrieval import RetrievalParams
 from ..store import IndexConfig, get_store
@@ -19,6 +20,12 @@ DEFAULT_SYSTEM_PROMPT = """你是一个基于检索资料回答问题的助手�
 - 在用到某个片段的句子后标注来源，例如 [1] 或 [2][3]。
 - 如果片段中没有足够的信息回答问题，请直接说明“资料中没有找到相关信息”，不要编造。
 - 默认使用与用户提问相同的语言回答。"""
+
+DEFAULT_SYSTEM_PROMPT_EN = """You are an assistant that answers questions from retrieved sources.
+The user message contains numbered source passages (<source id="N">). Answer only from these passages:
+- Cite the source after each sentence that uses it, e.g. [1] or [2][3].
+- If the passages don't contain enough information, say "I couldn't find this in the documents." Do not make anything up.
+- Answer in the same language as the user's question."""
 
 
 @dataclass
@@ -61,6 +68,11 @@ FLAT_DEFAULTS = {"default_provider_id": None}
 def _section_defaults(name: str) -> dict:
     if name == "embedding":  # 默认值来自环境变量，便于离线测试
         return EmbeddingSettings(backend=config.EMBEDDER, model=config.EMBED_MODEL).to_dict()
+    if name == "generation" and get_lang() == "en":  # 提示词默认值跟界面语言走（自己改过的不受影响）
+        return GenerationParams(
+            system_prompt=DEFAULT_SYSTEM_PROMPT_EN,
+            user_template="<sources>\n{sources}\n</sources>\n\nQuestion: {question}",
+        ).to_dict()
     return SECTIONS[name]().to_dict()
 
 
@@ -117,7 +129,7 @@ def embedding_config(overrides: dict | None = None) -> EmbeddingConfig:
         from . import providers  # 避免循环导入
 
         if not e.provider_id:
-            raise ValueError("使用 OpenAI 兼容向量接口时需要选择一个模型配置（提供地址和 Key）")
+            raise ValueError(t("使用 OpenAI 兼容向量接口时需要选择一个模型配置（提供地址和 Key）", "The OpenAI-compatible embedding backend needs a model config (for its endpoint and key)"))
         p = providers.get_config(e.provider_id)
         base_url, api_key = p.base_url, p.api_key
     return EmbeddingConfig(backend=e.backend, model=e.model, provider_id=e.provider_id, base_url=base_url, api_key=api_key)

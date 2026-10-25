@@ -4,6 +4,7 @@ import time
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from ..i18n import t
 from ..llm import LLMError
 from ..schemas import ChatRequest, CompareRequest, SearchRequest
 from ..services import documents, providers, rag, settings
@@ -17,7 +18,7 @@ def search(body: SearchRequest):
     try:
         return rag.retrieve(body.query, body.retrieval.overrides(), documents.resolve_filter(**body.filters()))
     except Exception as e:  # 例如重排序模型下载失败
-        raise HTTPException(500, f"检索失败：{e}")
+        raise HTTPException(500, t(f"检索失败：{e}", f"Retrieval failed: {e}"))
 
 
 @router.post("/search/compare")
@@ -27,13 +28,13 @@ def compare(body: CompareRequest):
     doc_ids = documents.resolve_filter(**body.filters())
     for i, s in enumerate(body.strategies):
         overrides = s.overrides()
-        label = overrides.pop("label", "") or f"策略 {i + 1}"
+        label = overrides.pop("label", "") or t(f"策略 {i + 1}", f"Strategy {i + 1}")
         start = time.perf_counter()
         try:
             info: dict = {}
             hits, error = rag.retrieve(body.query, overrides, doc_ids, trace=info), None
         except Exception as e:
-            hits, error = [], f"检索失败：{e}"
+            hits, error = [], t(f"检索失败：{e}", f"Retrieval failed: {e}")
         results.append({
             "label": label,
             "params": settings.retrieval_params(overrides).to_dict(),
@@ -66,11 +67,11 @@ def chat(body: ChatRequest):
                 yield _sse("delta", {"text": text})
             yield _sse("done", {"generation_ms": round((time.perf_counter() - start) * 1000)})
         except providers.NotFound:
-            yield _sse("error", {"message": "LLM 配置不存在，请先在“模型设置”里添加"})
+            yield _sse("error", {"message": t("LLM 配置不存在，请先在“LLM 模型”页添加", "LLM config not found. Add one on the LLM models page first.")})
         except LLMError as e:
             yield _sse("error", {"message": str(e)})
         except Exception as e:  # 不让异常把流直接断掉，前端拿不到原因
-            yield _sse("error", {"message": f"服务器错误：{e}"})
+            yield _sse("error", {"message": t(f"服务器错误：{e}", f"Server error: {e}")})
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

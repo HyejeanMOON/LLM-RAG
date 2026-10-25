@@ -1,6 +1,7 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from .. import config
+from ..i18n import t
 from ..parsers import UnsupportedFile, extract_text
 from ..schemas import ChunkPreviewRequest, DocumentCreate, DocumentUpdate
 from ..services import documents as svc
@@ -13,7 +14,7 @@ def _get_or_404(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except svc.NotFound:
-        raise HTTPException(404, "文档不存在")
+        raise HTTPException(404, t("文档不存在", "Document not found"))
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -40,7 +41,7 @@ def upload_documents(files: list[UploadFile] = File(...)):
     for f in files:
         data = f.file.read()
         if len(data) > config.MAX_UPLOAD_MB * 1024 * 1024:
-            results.append({"filename": f.filename, "error": f"文件超过 {config.MAX_UPLOAD_MB}MB"})
+            results.append({"filename": f.filename, "error": t(f"文件超过 {config.MAX_UPLOAD_MB}MB", f"File is larger than {config.MAX_UPLOAD_MB}MB")})
             continue
         try:
             text, file_type = extract_text(f.filename or "", data)
@@ -48,7 +49,7 @@ def upload_documents(files: list[UploadFile] = File(...)):
             results.append({"filename": f.filename, "error": str(e)})
             continue
         except Exception as e:  # 损坏的 PDF / docx 等
-            results.append({"filename": f.filename, "error": f"解析失败：{e}"})
+            results.append({"filename": f.filename, "error": t(f"解析失败：{e}", f"Failed to parse: {e}")})
             continue
         doc = svc.create_document(f.filename, text, file_type)
         results.append({"filename": f.filename, "document": {k: v for k, v in doc.items() if k != "content"}})
@@ -66,7 +67,7 @@ def preview_chunks(body: ChunkPreviewRequest):
     content = body.content
     if content is None:
         if not body.doc_id:
-            raise HTTPException(400, "需要 content 或 doc_id")
+            raise HTTPException(400, t("需要 content 或 doc_id", "content or doc_id is required"))
         content = _get_or_404(svc.get_document, body.doc_id)["content"]
     params = settings.chunking_params(body.chunking.model_dump(exclude_none=True))
     try:

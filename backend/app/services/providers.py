@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from .. import db
+from ..i18n import t
 from ..llm import ProviderConfig
 from . import settings
 
@@ -51,7 +52,7 @@ def get_config(pid: str | None) -> ProviderConfig:
     """取完整配置（含 key）。pid 为空时用默认提供商。"""
     pid = pid or settings.get("default_provider_id")
     if not pid:
-        raise NotFound("还没有配置任何 LLM")
+        raise NotFound(t("还没有配置任何 LLM", "No LLM is configured yet"))
     r = dict(_get_row(pid))
     r["extra"] = json.loads(r.pop("extra") or "{}")
     r.pop("created_at")

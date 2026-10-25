@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
+from ..i18n import t
 from ..llm import LLMError, create_llm
 from ..schemas import ProviderCreate, ProviderUpdate
 from ..services import local_models
@@ -12,7 +13,7 @@ def _call(fn, *args):
     try:
         return fn(*args)
     except svc.NotFound:
-        raise HTTPException(404, "LLM 配置不存在")
+        raise HTTPException(404, t("LLM 配置不存在", "LLM config not found"))
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -54,9 +55,12 @@ def test_provider(pid: str):
     """发一句话测试连通性和 key 是否有效。"""
     cfg = _call(svc.get_config, pid)
     try:
-        text = "".join(create_llm(cfg).stream("你是一个测试助手。", [{"role": "user", "content": "只回复两个字：成功"}]))
+        text = "".join(create_llm(cfg).stream(
+            t("你是一个测试助手。", "You are a test assistant."),
+            [{"role": "user", "content": t("只回复两个字：成功", "Reply with exactly one word: OK")}],
+        ))
     except LLMError as e:
         return {"ok": False, "message": str(e)}
     except Exception as e:
-        return {"ok": False, "message": f"调用失败：{e}"}
+        return {"ok": False, "message": t(f"调用失败：{e}", f"Call failed: {e}")}
     return {"ok": True, "message": text.strip()[:200]}

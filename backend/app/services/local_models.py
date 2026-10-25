@@ -9,6 +9,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
+from ..i18n import t
+
 # 常见本地服务的默认端口（8000 是本项目自己，vLLM 请手动填地址）
 KNOWN = [
     ("Ollama", 11434),
@@ -78,7 +80,7 @@ def probe(base_url: str, server: str | None = None) -> dict | None:
             return {"server": "Ollama", "base_url": base_url if base_url.endswith("/v1") else base_url + "/v1", "models": models}
         models = _openai_models(client, base_url)
         if models is not None:
-            return {"server": server or "OpenAI 兼容", "base_url": base_url, "models": models}
+            return {"server": server or t("OpenAI 兼容", "OpenAI-compatible"), "base_url": base_url, "models": models}
     return None
 
 

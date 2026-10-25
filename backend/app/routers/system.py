@@ -4,6 +4,7 @@ import numpy as np
 from fastapi import APIRouter, HTTPException
 
 from ..embeddings import FASTEMBED_MODELS, get_embedder
+from ..i18n import get_lang, t
 from ..schemas import EmbeddingOptions, EmbeddingTest, SettingsUpdate
 from ..services import documents, settings
 
@@ -15,7 +16,7 @@ def health():
     try:
         store = settings.current_store()
     except Exception as e:  # 例如 embedding 模型下载失败
-        return {"status": "error", "message": f"向量模型加载失败：{e}", "documents": len(documents.list_documents())}
+        return {"status": "error", "message": t(f"向量模型加载失败：{e}", f"Failed to load the embedding model: {e}"), "documents": len(documents.list_documents())}
     expected = documents.expected_chunks()
     return {
         "status": "ok",
@@ -40,7 +41,7 @@ def get_defaults():
 @router.post("/settings/{section}/reset")
 def reset_section(section: str):
     if section not in settings.SECTIONS:
-        raise HTTPException(404, "没有这个设置分组")
+        raise HTTPException(404, t("没有这个设置分组", "No such settings section"))
     return settings.reset_section(section)
 
 
@@ -50,7 +51,7 @@ def update_settings(body: SettingsUpdate):
     current = settings.get_all()
     c = {**current["chunking"], **values.get("chunking", {})}
     if c["chunk_overlap"] >= c["chunk_size"]:
-        raise HTTPException(400, "重叠长度必须小于切片长度")
+        raise HTTPException(400, t("重叠长度必须小于切片长度", "Overlap must be smaller than the chunk size"))
     g = values.get("generation")
     if g:
         # 0 / 负数 / 空字符串 表示“清空，使用模型配置里的值”
@@ -63,12 +64,14 @@ def update_settings(body: SettingsUpdate):
     if "embedding" in values:
         merged = {**current["embedding"], **values["embedding"]}
         if merged["backend"] == "openai" and not merged.get("provider_id"):
-            raise HTTPException(400, "使用 OpenAI 兼容向量接口时需要选择一个模型配置（提供地址和 Key）")
+            raise HTTPException(400, t("使用 OpenAI 兼容向量接口时需要选择一个模型配置（提供地址和 Key）", "The OpenAI-compatible embedding backend needs a model config (for its endpoint and key)"))
     return settings.update(values)
 
 
 @router.get("/embedding/models")
 def embedding_models():
+    if get_lang() == "en":
+        return [{**m, "lang": m["lang_en"], "note": m["note_en"]} for m in FASTEMBED_MODELS]
     return FASTEMBED_MODELS
 
 
@@ -82,7 +85,7 @@ def embedding_test(body: EmbeddingTest, backend: str | None = None, model: str |
         vecs = np.asarray(embedder.embed_documents(body.texts), dtype=np.float32)
         elapsed = (time.perf_counter() - start) * 1000
     except Exception as e:
-        raise HTTPException(400, f"向量化失败：{e}")
+        raise HTTPException(400, t(f"向量化失败：{e}", f"Embedding failed: {e}"))
     norms = np.linalg.norm(vecs, axis=1)
     unit = vecs / np.maximum(norms[:, None], 1e-12)
     return {

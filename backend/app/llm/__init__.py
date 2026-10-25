@@ -1,3 +1,4 @@
+from ..i18n import t
 from .base import LLMError, ProviderConfig
 
 
@@ -10,7 +11,7 @@ def create_llm(cfg: ProviderConfig):
         from .openai_provider import OpenAICompatibleLLM
 
         return OpenAICompatibleLLM(cfg)
-    raise LLMError(f"未知的 LLM 类型：{cfg.type}")
+    raise LLMError(t(f"未知的 LLM 类型：{cfg.type}", f"Unknown LLM type: {cfg.type}"))
 
 
 __all__ = ["LLMError", "ProviderConfig", "create_llm"]
