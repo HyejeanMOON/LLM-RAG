@@ -10,4 +10,7 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # 网络访问不了 HuggingFace 时可以设置镜像，例如 https://hf-mirror.com
       - HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}
+    # 让容器能用 host.docker.internal 访问宿主机上的 Ollama / LM Studio（Linux 需要这一行，Mac/Windows 自带）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped

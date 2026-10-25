@@ -1,4 +1,5 @@
-"""OpenAI 兼容接口：OpenAI、DeepSeek、通义千问、Kimi、智谱、Ollama 等都能用。"""
+"""OpenAI 兼容接口：OpenAI、DeepSeek、通义千问、Kimi、智谱，以及本地的 Ollama / LM Studio / llama.cpp 都能用。"""
+import os
 from typing import Iterator
 
 import openai
@@ -36,10 +37,25 @@ class OpenAICompatibleLLM:
         except openai.AuthenticationError as e:
             raise LLMError("API Key 无效或未设置") from e
         except openai.NotFoundError as e:
-            raise LLMError(f"模型或接口地址不存在：{self.cfg.model} @ {self.cfg.base_url or 'api.openai.com'}") from e
+            hint = "。本地模型请先下载，例如 `ollama pull " + self.cfg.model + "`" if _is_local(self.cfg.base_url) else ""
+            raise LLMError(f"模型或接口地址不存在：{self.cfg.model} @ {self.cfg.base_url or 'api.openai.com'}{hint}") from e
         except openai.RateLimitError as e:
             raise LLMError("请求太频繁或额度不足，请稍后再试") from e
         except openai.APIStatusError as e:
             raise LLMError(f"模型接口返回错误 {e.status_code}：{e.message}") from e
         except openai.APIConnectionError as e:
-            raise LLMError("连接模型接口失败，请检查网络或 Base URL") from e
+            raise LLMError(_connection_hint(self.cfg.base_url)) from e
+
+
+def _is_local(base_url: str) -> bool:
+    return any(h in (base_url or "") for h in ("localhost", "127.0.0.1", "host.docker.internal"))
+
+
+def _connection_hint(base_url: str) -> str:
+    msg = "连接模型接口失败，请检查网络或 Base URL"
+    if "localhost" in (base_url or "") or "127.0.0.1" in (base_url or ""):
+        if os.path.exists("/.dockerenv"):
+            return msg + "。后端运行在 Docker 里，localhost 指的是容器自己，访问宿主机上的模型请把地址改成 http://host.docker.internal:端口/v1"
+    if _is_local(base_url):
+        return msg + "。本地模型服务启动了吗？Ollama 可以运行 `ollama serve`，再用 `ollama list` 看已安装的模型"
+    return msg

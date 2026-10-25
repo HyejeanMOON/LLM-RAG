@@ -163,6 +163,23 @@ export interface Provider {
   extra: Record<string, unknown>;
   is_default: boolean;
 }
+export interface LocalModel {
+  id: string;
+  size_gb?: number | null;
+  parameter_size?: string | null;
+  quantization?: string | null;
+  family?: string | null;
+}
+export interface LocalServer {
+  server: string;
+  base_url: string;
+  models: LocalModel[];
+}
+export interface LocalDiscovery {
+  in_docker: boolean;
+  servers: LocalServer[];
+  tried: string[];
+}
 export interface ProviderInput {
   name: string;
   type: ProviderType;
@@ -256,6 +273,8 @@ export const api = {
   updateProvider: (id: string, p: Partial<ProviderInput>) => request<Provider>(`/api/providers/${id}`, json("PUT", p)),
   deleteProvider: (id: string) => request<void>(`/api/providers/${id}`, json("DELETE")),
   setDefaultProvider: (id: string) => request<Provider[]>(`/api/providers/${id}/default`, json("POST")),
+  discoverLocal: (base_url?: string) =>
+    request<LocalDiscovery>(`/api/providers/local/discover${base_url ? `?base_url=${encodeURIComponent(base_url)}` : ""}`),
   testProvider: (id: string) => request<{ ok: boolean; message: string }>(`/api/providers/${id}/test`, json("POST")),
 
   getSettings: () => request<Settings>("/api/settings"),

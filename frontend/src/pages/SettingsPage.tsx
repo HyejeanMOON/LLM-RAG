@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Provider, type ProviderInput } from "../api";
+import LocalModelPicker from "../components/LocalModelPicker";
 
 // 常见厂商的预设，选中后自动填好接口地址和模型名（模型名可以再改）
 const PRESETS: { label: string; value: ProviderInput }[] = [
@@ -9,8 +10,13 @@ const PRESETS: { label: string; value: ProviderInput }[] = [
   { label: "通义千问", value: { name: "通义千问", type: "openai", base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus", extra: {} } },
   { label: "Kimi (Moonshot)", value: { name: "Kimi", type: "openai", base_url: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k", extra: {} } },
   { label: "智谱 GLM", value: { name: "智谱 GLM", type: "openai", base_url: "https://open.bigmodel.cn/api/paas/v4", model: "glm-4-flash", extra: {} } },
-  { label: "Ollama（本地）", value: { name: "Ollama", type: "openai", base_url: "http://localhost:11434/v1", model: "qwen2.5:7b", extra: {} } },
+  // 本地模型：都走 OpenAI 兼容接口，不需要 API Key。Docker 里运行时把 localhost 换成 host.docker.internal
+  { label: "本地 · Gemma 4（Ollama）", value: { name: "Gemma 4（本地）", type: "openai", base_url: "http://localhost:11434/v1", model: "gemma4:e4b", extra: { temperature: 0.3 } } },
+  { label: "本地 · Ollama 其他模型", value: { name: "Ollama", type: "openai", base_url: "http://localhost:11434/v1", model: "qwen3:8b", extra: {} } },
+  { label: "本地 · LM Studio", value: { name: "LM Studio", type: "openai", base_url: "http://localhost:1234/v1", model: "", extra: {} } },
+  { label: "本地 · llama.cpp server", value: { name: "llama.cpp", type: "openai", base_url: "http://localhost:8080/v1", model: "", extra: {} } },
 ];
+const LOCAL_PRESET = PRESETS.findIndex((p) => p.label.startsWith("本地 · Gemma 4"));
 
 const EMPTY: ProviderInput = { ...PRESETS[0].value };
 
@@ -18,6 +24,7 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
   const [providers, setProviders] = useState<Provider[]>([]);
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [form, setForm] = useState<ProviderInput>(EMPTY);
+  const [presetIndex, setPresetIndex] = useState(0);
   const [apiKey, setApiKey] = useState("");
   const [extraText, setExtraText] = useState("{}");
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string } | "loading">>({});
@@ -37,7 +44,7 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
     }
   };
 
-  function startEdit(p?: Provider) {
+  function startEdit(p?: Provider, presetIndex?: number) {
     setMsg(null);
     setApiKey("");
     if (p) {
@@ -45,9 +52,11 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
       setForm({ name: p.name, type: p.type, base_url: p.base_url, model: p.model, extra: p.extra });
       setExtraText(JSON.stringify(p.extra, null, 2));
     } else {
+      const preset = presetIndex !== undefined ? PRESETS[presetIndex].value : EMPTY;
       setEditing("new");
-      setForm(EMPTY);
-      setExtraText(JSON.stringify(EMPTY.extra, null, 2));
+      setPresetIndex(presetIndex ?? 0);
+      setForm({ ...preset });
+      setExtraText(JSON.stringify(preset.extra, null, 2));
     }
   }
 
@@ -127,6 +136,10 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
         <button className="card add" onClick={() => startEdit()}>
           ＋ 添加模型
         </button>
+        <button className="card add" onClick={() => startEdit(undefined, LOCAL_PRESET)}>
+          ＋ 添加本地模型
+          <span className="small muted">Ollama / LM Studio / llama.cpp，例如 Gemma 4</span>
+        </button>
       </div>
 
       {editing && (
@@ -136,7 +149,9 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
             <label>
               预设
               <select
+                value={presetIndex}
                 onChange={(e) => {
+                  setPresetIndex(Number(e.target.value));
                   const p = PRESETS[Number(e.target.value)].value;
                   setForm({ ...p });
                   setExtraText(JSON.stringify(p.extra, null, 2));
@@ -173,12 +188,26 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
               onChange={(e) => setForm({ ...form, base_url: e.target.value })}
             />
           </label>
+          {form.type === "openai" && (
+            <LocalModelPicker
+              baseUrl={form.base_url}
+              onPick={({ server, base_url, model }) =>
+                setForm((f) => ({
+                  ...f,
+                  base_url,
+                  model,
+                  // 名称还是预设的默认名时，换成“服务 · 模型”
+                  name: editing === "new" && PRESETS.some((p) => p.value.name === f.name) ? `${model}（${server}）` : f.name,
+                }))
+              }
+            />
+          )}
           <label>
             API Key
             <input
               type="password"
               value={apiKey}
-              placeholder={editing === "new" ? "" : "留空表示不修改"}
+              placeholder={editing === "new" ? (form.base_url.match(/localhost|127\.0\.0\.1|host\.docker\.internal/) ? "本地模型不需要，留空即可" : "") : "留空表示不修改"}
               onChange={(e) => setApiKey(e.target.value)}
               autoComplete="off"
             />

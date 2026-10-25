@@ -29,7 +29,7 @@
 | 上下文组装 | 总字数上限、相邻片段扩展（small-to-big）、片段排序（相关度 / 原文顺序 / 两头放最相关） |
 | 生成 | 系统提示词、用户消息模板、片段模板都可编辑；max_tokens、temperature（OpenAI 兼容）、effort（Claude） |
 | 流程追踪 | 每条回答下可展开：改写后的问题、多查询、HyDE 文本、过滤结果、检索统计、上下文组装、发送给模型的完整提示词、各步耗时 |
-| LLM | **Claude**（Anthropic 官方 SDK）和 **OpenAI 兼容接口**（OpenAI、DeepSeek、通义千问、Kimi、智谱、本地 Ollama…），网页上添加多个、设默认、测试连接，问答时下拉切换 |
+| LLM | **Claude**（Anthropic 官方 SDK）和 **OpenAI 兼容接口**（OpenAI、DeepSeek、通义千问、Kimi、智谱…），以及**本地模型**（Ollama / LM Studio / llama.cpp，例如 Gemma 4，能自动检测本机已装的模型），网页上添加多个、设默认、测试连接，问答时下拉切换 |
 | 问答 | SSE 流式输出；先返回检索到的片段（含相似度），回答里用 [1][2] 标注来源；支持多轮对话、可随时停止 |
 | 检索算法 | 向量检索（余弦 / 点积 / 欧氏距离）、BM25 关键词、混合检索（RRF 排名融合或分数加权）、交叉编码器重排序、MMR 多样性、Top K、余弦相似度阈值，可任意组合 |
 | 检索调试 | 同一个问题用最多 4 种策略并排对比：每个片段显示余弦、点积、欧氏距离、BM25、混合、重排序、MMR 各项分数，以及它在其他策略里的排名；满意的策略一键设为问答默认 |
@@ -97,9 +97,48 @@ npm run dev                                           # 打开 http://localhost:
 | 通义千问 | OpenAI 兼容 | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
 | Kimi | OpenAI 兼容 | `https://api.moonshot.cn/v1` |
 | 智谱 GLM | OpenAI 兼容 | `https://open.bigmodel.cn/api/paas/v4` |
-| Ollama | OpenAI 兼容 | `http://localhost:11434/v1`（Docker 里运行时改成 `http://host.docker.internal:11434/v1`） |
+| 本地 · Gemma 4（Ollama） | OpenAI 兼容 | `http://localhost:11434/v1`，模型 `gemma4:e4b` |
+| 本地 · Ollama 其他模型 | OpenAI 兼容 | `http://localhost:11434/v1` |
+| 本地 · LM Studio | OpenAI 兼容 | `http://localhost:1234/v1` |
+| 本地 · llama.cpp server | OpenAI 兼容 | `http://localhost:8080/v1` |
 
 “高级参数”是 JSON：Claude 支持 `effort`（`low`/`medium`/`high`）和 `max_tokens`；OpenAI 兼容接口支持 `temperature`。
+
+## 本地模型（以 Gemma 4 为例）
+
+本地模型不花钱、数据不出电脑，适合拿来和 Claude 对比 RAG 的效果。Ollama、LM Studio、llama.cpp 都提供 OpenAI 兼容接口，所以不需要额外代码，也不需要 API Key。
+
+**1. 安装 Ollama 并下载 Gemma 4**
+
+```bash
+# 安装：https://ollama.com/download（Mac / Windows 有安装包，Linux 用下面这行）
+curl -fsSL https://ollama.com/install.sh | sh
+
+ollama pull gemma4:e4b     # 笔记本 / 普通台式机够用
+# ollama pull gemma4:e2b   # 最小，内存紧张时用
+# ollama pull gemma4:26b   # MoE，建议 16GB 以上显存
+# ollama pull gemma4:31b   # 最大最强
+ollama list                # 看已经装好的模型
+```
+
+Ollama 装好后会在后台运行，默认地址 `http://localhost:11434`。
+
+**2. 在网页上添加**
+
+“LLM 模型” → “＋ 添加本地模型” → 点 “🔍 检测本地模型”。后端会扫描 Ollama（11434）、LM Studio（1234）、llama.cpp（8080）这几个默认端口，列出已安装的模型和参数量、量化方式、大小，点一下就会填好 Base URL 和模型名。保存后点“测试连接”，再到问答页的下拉框里切换过去。
+
+端口不是默认值时，把 Base URL 改好，点“只检测当前 Base URL”。
+
+**3. 用 Docker 运行时**
+
+容器里的 `localhost` 指的是容器自己，访问宿主机上的 Ollama 要用 `http://host.docker.internal:11434/v1`。`docker-compose.yml` 已经加了 `extra_hosts: host.docker.internal:host-gateway`（Linux 需要，Mac / Windows 自带），自动检测也会先试这个地址。Linux 上还要让 Ollama 监听所有网卡：`OLLAMA_HOST=0.0.0.0 ollama serve`。
+
+**小提示**
+
+- 第一次提问时 Ollama 要把模型加载进内存，会慢几秒到几十秒，之后就快了。
+- 小模型更容易不按要求引用片段或者编造，可以在“RAG 流程 → 生成”里把提示词写得更直接，temperature 调低一点（预设是 0.3）。
+- Ollama 默认上下文窗口比较小，片段很多时可能被截断，可以把“上下文”里的字符预算调小，或者启动 Ollama 时调大上下文，例如 `OLLAMA_CONTEXT_LENGTH=16384 ollama serve`。
+- 向量化也可以用本地模型：`ollama pull bge-m3`，然后在“RAG 流程 → 向量化”里选 OpenAI 兼容接口。
 
 ## 切分算法说明
 
@@ -179,7 +218,7 @@ backend/
     embeddings.py        fastembed / hash 向量化
     store.py             Chroma 向量库：写入、删除、按文档过滤检索
     llm/                 LLM 统一接口：anthropic_provider.py、openai_provider.py
-    services/            业务逻辑：documents / providers / settings / rag
+    services/            业务逻辑：documents / providers / local_models（本地模型检测） / settings / rag
     routers/             HTTP 接口
   tests/                 pytest（用 hash 向量和假 LLM，不需要网络和 key）
   sample_docs/           示例文档
@@ -202,6 +241,7 @@ frontend/
 | POST | `/api/search/compare` | 多策略对比：query, doc_ids, strategies（最多 6 个） |
 | POST | `/api/chat` | 问答（SSE）：query, provider_id, history, retrieval, 过滤条件；事件依次为 trace、sources、delta…、done 或 error |
 | GET/POST/PUT/DELETE | `/api/providers[/{id}]` | 模型配置；`POST /{id}/default` 设默认，`POST /{id}/test` 测试连接 |
+| GET | `/api/providers/local/discover[?base_url=]` | 检测本机的 Ollama / LM Studio / llama.cpp 及已安装的模型 |
 | GET/PUT | `/api/settings` | RAG 流程各环节参数（chunking / embedding / index / query / retrieval / context / generation）；`POST /api/settings/{分组}/reset` 恢复默认 |
 | GET | `/api/embedding/models` | 常用 embedding 模型列表 |
 | POST | `/api/embedding/test` | 向量化实验：texts，可用 query 参数临时指定 backend / model / provider_id |

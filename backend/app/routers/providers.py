@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 
 from ..llm import LLMError, create_llm
 from ..schemas import ProviderCreate, ProviderUpdate
+from ..services import local_models
 from ..services import providers as svc
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
@@ -19,6 +20,12 @@ def _call(fn, *args):
 @router.get("")
 def list_providers():
     return svc.list_providers()
+
+
+@router.get("/local/discover")
+def discover_local(base_url: str | None = None):
+    """找本机的 Ollama / LM Studio / llama.cpp，列出已安装的模型；给 base_url 时只探测这个地址。"""
+    return local_models.discover(base_url)
 
 
 @router.post("")
