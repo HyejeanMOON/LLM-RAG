@@ -192,9 +192,7 @@ def chunk_text(text: str, params: ChunkingParams | None = None, embedder=None) -
             parts = recursive_chunks(body.strip(), p.chunk_size, p.chunk_overlap)
         elif p.strategy == "semantic":
             if embedder is None:
-                from .embeddings import get_embedder
-
-                embedder = get_embedder()
+                raise ValueError("语义切分需要传入 embedder")
             parts = semantic_chunks(body, p.chunk_size, p.chunk_overlap, p.semantic_percentile, embedder)
         else:
             raise ValueError(f"未知的切分策略：{p.strategy}")

@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Provider, type ProviderInput, type Settings } from "../api";
-import ChunkingEditor from "../components/ChunkingEditor";
-import StrategyEditor from "../components/StrategyEditor";
+import { api, type Provider, type ProviderInput } from "../api";
 
 // 常见厂商的预设，选中后自动填好接口地址和模型名（模型名可以再改）
 const PRESETS: { label: string; value: ProviderInput }[] = [
@@ -23,12 +21,10 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
   const [apiKey, setApiKey] = useState("");
   const [extraText, setExtraText] = useState("{}");
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string } | "loading">>({});
-  const [settings, setSettings] = useState<Settings | null>(null);
   const [msg, setMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     api.listProviders().then(setProviders);
-    api.getSettings().then(setSettings);
   }, [version]);
 
   const report = async (fn: () => Promise<string | void>) => {
@@ -205,46 +201,7 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
         </div>
       )}
 
-      <h2>检索与切片</h2>
-      {settings && (
-        <div className="form">
-          <h3>默认切分策略</h3>
-          <p className="muted small">新上传的文档使用这里的策略。单篇文档可以在“文档管理 → 切片”里单独设置并预览效果。</p>
-          <ChunkingEditor value={settings.chunking} onChange={(chunking) => setSettings({ ...settings, chunking })} />
-          <h3>问答默认检索策略</h3>
-          <p className="muted small">也可以在“检索调试”页对比几种策略后，点“设为问答默认”。</p>
-          <StrategyEditor value={settings.retrieval} onChange={(retrieval) => setSettings({ ...settings, retrieval })} />
-          <label>
-            多轮对话带上最近几轮
-            <input type="number" value={settings.history_turns} onChange={(e) => setSettings({ ...settings, history_turns: Number(e.target.value) })} />
-          </label>
-          <div className="row">
-            <button
-              onClick={() =>
-                report(async () => {
-                  const { default_provider_id: _ignored, ...rest } = settings;
-                  setSettings(await api.updateSettings(rest));
-                  return "已保存。修改默认切分策略后，点“重建索引”才会对已有文档生效（单独设置过策略的文档保持不变）。";
-                })
-              }
-            >
-              保存设置
-            </button>
-            <button
-              className="secondary"
-              onClick={() =>
-                report(async () => {
-                  const r = await api.reindex();
-                  onChanged();
-                  return `重建完成：${r.documents} 篇文档，${r.chunks} 个切片`;
-                })
-              }
-            >
-              重建索引
-            </button>
-          </div>
-        </div>
-      )}
+      <p className="muted small">切分、向量化、检索、提示词等参数在“RAG 流程”页面设置。</p>
     </div>
   );
 }

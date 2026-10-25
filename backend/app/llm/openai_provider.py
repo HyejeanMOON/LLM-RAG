@@ -17,8 +17,12 @@ class OpenAICompatibleLLM:
 
     def stream(self, system: str, messages: list[dict]) -> Iterator[str]:
         kwargs = {}
-        if "temperature" in self.cfg.extra:
+        if self.cfg.extra.get("temperature") is not None:
             kwargs["temperature"] = float(self.cfg.extra["temperature"])
+        if self.cfg.extra.get("top_p") is not None:
+            kwargs["top_p"] = float(self.cfg.extra["top_p"])
+        if self.cfg.extra.get("max_tokens"):
+            kwargs["max_tokens"] = int(self.cfg.extra["max_tokens"])
         try:
             resp = self.client.chat.completions.create(
                 model=self.cfg.model,

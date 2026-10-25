@@ -21,6 +21,7 @@ class DocumentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1)
     chunking: ChunkingOptions | None = None  # 不传表示用全局默认
+    tags: list[str] = []
 
 
 class DocumentUpdate(BaseModel):
@@ -28,6 +29,7 @@ class DocumentUpdate(BaseModel):
     content: str | None = Field(default=None, min_length=1)
     chunking: ChunkingOptions | None = None
     use_default_chunking: bool = False  # true：去掉这篇文档的单独设置，改回全局默认
+    tags: list[str] | None = None
 
 
 class ChunkPreviewRequest(BaseModel):
@@ -49,14 +51,26 @@ class RetrievalOptions(BaseModel):
     use_mmr: bool | None = None
     mmr_lambda: float | None = Field(default=None, ge=0, le=1)
     use_rerank: bool | None = None
+    index: Literal["exact", "hnsw"] | None = None
+    ann_candidates: int | None = Field(default=None, ge=1, le=1000)
 
     def overrides(self) -> dict:
         return self.model_dump(exclude_none=True)
 
 
-class SearchRequest(BaseModel):
-    query: str = Field(min_length=1)
+class FilterFields(BaseModel):
+    """元数据过滤：指定文档、含任一标签、更新日期范围（YYYY-MM-DD）。"""
     doc_ids: list[str] | None = None
+    tags: list[str] | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+
+    def filters(self) -> dict:
+        return {"doc_ids": self.doc_ids, "tags": self.tags, "date_from": self.date_from, "date_to": self.date_to}
+
+
+class SearchRequest(FilterFields):
+    query: str = Field(min_length=1)
     retrieval: RetrievalOptions = RetrievalOptions()
 
 
@@ -64,9 +78,8 @@ class Strategy(RetrievalOptions):
     label: str = ""
 
 
-class CompareRequest(BaseModel):
+class CompareRequest(FilterFields):
     query: str = Field(min_length=1)
-    doc_ids: list[str] | None = None
     strategies: list[Strategy] = Field(min_length=1, max_length=6)
 
 
@@ -98,7 +111,61 @@ class ProviderUpdate(BaseModel):
     extra: dict | None = None
 
 
+class EmbeddingOptions(BaseModel):
+    backend: Literal["fastembed", "openai", "hash"] | None = None
+    model: str | None = Field(default=None, min_length=1)
+    provider_id: str | None = None
+
+
+class IndexOptions(BaseModel):
+    space: Literal["cosine", "l2", "ip"] | None = None
+    max_neighbors: int | None = Field(default=None, ge=2, le=128)
+    ef_construction: int | None = Field(default=None, ge=10, le=2000)
+    ef_search: int | None = Field(default=None, ge=1, le=2000)
+
+
+class QueryOptions(BaseModel):
+    history_turns: int | None = Field(default=None, ge=0, le=20)
+    condense_history: bool | None = None
+    multi_query: bool | None = None
+    multi_query_n: int | None = Field(default=None, ge=1, le=8)
+    hyde: bool | None = None
+
+
+class ContextOptions(BaseModel):
+    max_chars: int | None = Field(default=None, ge=200, le=200000)
+    neighbor_window: int | None = Field(default=None, ge=0, le=5)
+    order: Literal["score", "document", "edges"] | None = None
+
+
+class GenerationOptions(BaseModel):
+    system_prompt: str | None = Field(default=None, min_length=1)
+    user_template: str | None = Field(default=None, min_length=1)
+    source_template: str | None = Field(default=None, min_length=1)
+    max_tokens: int | None = Field(default=None, ge=0, le=128000)   # 0 表示清空，用模型配置
+    temperature: float | None = Field(default=None, ge=-1, le=2)     # 负数表示清空
+    effort: Literal["", "low", "medium", "high", "xhigh", "max"] | None = None
+
+    @model_validator(mode="after")
+    def _templates(self):
+        if self.user_template is not None and "{sources}" not in self.user_template:
+            raise ValueError("用户消息模板里必须包含 {sources}")
+        if self.user_template is not None and "{question}" not in self.user_template:
+            raise ValueError("用户消息模板里必须包含 {question}")
+        if self.source_template is not None and "{text}" not in self.source_template:
+            raise ValueError("片段模板里必须包含 {text}")
+        return self
+
+
 class SettingsUpdate(BaseModel):
     chunking: ChunkingOptions | None = None
+    embedding: EmbeddingOptions | None = None
+    index: IndexOptions | None = None
+    query: QueryOptions | None = None
     retrieval: RetrievalOptions | None = None
-    history_turns: int | None = Field(default=None, ge=0, le=20)
+    context: ContextOptions | None = None
+    generation: GenerationOptions | None = None
+
+
+class EmbeddingTest(BaseModel):
+    texts: list[str] = Field(min_length=2, max_length=10)

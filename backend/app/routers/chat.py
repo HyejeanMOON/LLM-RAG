@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 
 from ..llm import LLMError
 from ..schemas import ChatRequest, CompareRequest, SearchRequest
-from ..services import providers, rag, settings
+from ..services import documents, providers, rag, settings
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api", tags=["chat"])
 def search(body: SearchRequest):
     """只做向量检索，不调用 LLM，用来调试检索效果。"""
     try:
-        return rag.retrieve(body.query, body.retrieval.overrides(), body.doc_ids)
+        return rag.retrieve(body.query, body.retrieval.overrides(), documents.resolve_filter(**body.filters()))
     except Exception as e:  # 例如重排序模型下载失败
         raise HTTPException(500, f"检索失败：{e}")
 
@@ -24,12 +24,14 @@ def search(body: SearchRequest):
 def compare(body: CompareRequest):
     """同一个问题用多种检索策略各跑一遍，前端并排对比。"""
     results = []
+    doc_ids = documents.resolve_filter(**body.filters())
     for i, s in enumerate(body.strategies):
         overrides = s.overrides()
         label = overrides.pop("label", "") or f"策略 {i + 1}"
         start = time.perf_counter()
         try:
-            hits, error = rag.retrieve(body.query, overrides, body.doc_ids), None
+            info: dict = {}
+            hits, error = rag.retrieve(body.query, overrides, doc_ids, trace=info), None
         except Exception as e:
             hits, error = [], f"检索失败：{e}"
         results.append({
@@ -38,6 +40,7 @@ def compare(body: CompareRequest):
             "hits": hits,
             "error": error,
             "elapsed_ms": round((time.perf_counter() - start) * 1000, 1),
+            "searched": info.get("searched") if not error else None,
         })
     return results
 
@@ -48,15 +51,20 @@ def _sse(event: str, data) -> str:
 
 @router.post("/chat")
 def chat(body: ChatRequest):
-    """SSE 流：先发 sources（检索到的片段），再逐段发 delta，最后 done 或 error。"""
+    """SSE 流：先发 trace（流程每一步的中间结果）和 sources（最终放进提示词的片段），
+    再逐段发 delta，最后 done 或 error。"""
     def gen():
         try:
-            hits = rag.retrieve(body.query, body.retrieval.overrides(), body.doc_ids)
-            yield _sse("sources", hits)
-            history = [m.model_dump() for m in body.history]
-            for text in rag.answer_stream(body.query, hits, body.provider_id, history):
+            sources, trace, stream = rag.run_pipeline(
+                body.query, body.provider_id, [m.model_dump() for m in body.history],
+                body.retrieval.overrides(), body.filters(),
+            )
+            yield _sse("trace", trace)
+            yield _sse("sources", sources)
+            start = time.perf_counter()
+            for text in stream:
                 yield _sse("delta", {"text": text})
-            yield _sse("done", {})
+            yield _sse("done", {"generation_ms": round((time.perf_counter() - start) * 1000)})
         except providers.NotFound:
             yield _sse("error", {"message": "LLM 配置不存在，请先在“模型设置”里添加"})
         except LLMError as e:

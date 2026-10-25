@@ -15,6 +15,8 @@ export const DEFAULT_PARAMS: RetrievalParams = {
   use_mmr: false,
   mmr_lambda: 0.5,
   use_rerank: false,
+  index: "exact",
+  ann_candidates: 50,
 };
 
 /** 一句话描述策略，用作对比列的默认标题 */
@@ -24,6 +26,7 @@ export function describe(p: RetrievalParams): string {
   if (p.method === "hybrid") parts.push(p.fusion === "rrf" ? "RRF" : `加权 α=${p.hybrid_alpha}`);
   if (p.use_rerank) parts.push("重排序");
   if (p.use_mmr) parts.push(`MMR λ=${p.mmr_lambda}`);
+  if (p.index === "hnsw") parts.push(`HNSW 候选 ${p.ann_candidates}`);
   return parts.join(" · ");
 }
 
@@ -34,6 +37,8 @@ const HELP = {
   mmr: "MMR（最大边际相关）：每次挑“和问题相关、又和已选片段不重复”的片段。λ=1 只看相关性，越小越重视多样性。",
   rerank: "用交叉编码器（bge-reranker-base）把问题和每个候选片段一起打分，通常更准，但更慢，首次使用需下载约 1GB 模型。",
   min_score: "按余弦相似度过滤，低于阈值的片段不返回、不发给模型。",
+  index:
+    "精确：和每个切片都算一遍相似度，结果最准，数据量大时慢。HNSW：在预先建好的“多层邻居图”上从粗到细地找最近邻，只看一小部分切片，快但可能漏掉真正最近的（召回率 < 100%）。",
 };
 
 export default function StrategyEditor({
@@ -97,6 +102,16 @@ export default function StrategyEditor({
             <label title="RRF 公式里的常数 k，越大排名靠后的结果影响越大">RRF k{num("rrf_k", 10, 1, 1000)}</label>
           )}
         </>
+      )}
+      <label title={HELP.index}>
+        索引方式
+        <select value={value.index} onChange={(e) => set("index", e.target.value as RetrievalParams["index"])}>
+          <option value="exact">精确计算（暴力检索）</option>
+          <option value="hnsw">HNSW 近似检索</option>
+        </select>
+      </label>
+      {value.index === "hnsw" && (
+        <label title="HNSW 先召回多少个向量候选（BM25 也召回同样数量），之后只在候选里打分">ANN 候选数{num("ann_candidates", 10, 1, 1000)}</label>
       )}
       <label>Top K{num("top_k", 1, 1, 50)}</label>
       <label title={HELP.min_score}>最低余弦相似度{num("min_score", 0.05, -1, 1)}</label>

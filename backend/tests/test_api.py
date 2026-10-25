@@ -114,7 +114,8 @@ def test_chat_streams_sources_and_answer(client, monkeypatch):
         "history": [{"role": "user", "content": "你好"}, {"role": "assistant", "content": "你好！"}],
     })
     ev = _events(r.text)
-    assert ev[0][0] == "sources" and len(ev[0][1]) == 4
+    assert ev[0][0] == "trace" and ev[0][1]["retrieval"]["hits"] == 4
+    assert ev[1][0] == "sources" and len(ev[1][1]) == 4
     assert "".join(d["text"] for e, d in ev if e == "delta") == "答案[1]"
     assert ev[-1][0] == "done"
     assert seen["cfg"].model == "claude-opus-5-5"

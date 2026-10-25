@@ -20,13 +20,18 @@
 |---|---|
 | 文档管理 | 上传 .md / .txt / .pdf / .docx（可多选、拖拽），也能直接粘贴新建；在线编辑后自动重新切片入库；删除时向量一起删 |
 | 切分算法 | 标题 + 句子、固定长度、按段落、递归切分、语义切分五种，可调长度、重叠、是否加小节标题；设置全局默认，也可以每篇文档单独设置，应用前能并排预览切片效果 |
-| 向量化 | 默认 [fastembed](https://github.com/qdrant/fastembed) 本地运行 `BAAI/bge-small-zh-v1.5`，免费、不需要 Key |
-| 向量库 | [Chroma](https://www.trychroma.com/)，本地持久化，余弦相似度；每篇文档的切片带 `doc_id`，支持只在指定文档里检索 |
+| 向量化 | 可在网页切换：本地 [fastembed](https://github.com/qdrant/fastembed) 模型（默认 `BAAI/bge-small-zh-v1.5`，还有 jina-zh、multilingual-e5、Qwen3-Embedding 等）、OpenAI 兼容向量接口（OpenAI / 通义 / 智谱 / Ollama bge-m3…）、离线字符哈希；带“向量化实验”看句子间相似度 |
+| 向量库 | [Chroma](https://www.trychroma.com/)，本地持久化；HNSW 参数（距离、M、ef_construction、ef_search）可调，检索时可选精确计算或 HNSW 近似检索 |
+| 问题处理 | 结合历史改写问题、多查询（Multi-Query + RRF 融合）、HyDE 假想文档，可分别开关 |
+| 元数据过滤 | 文档可打标签；问答和检索调试可按文档、标签、更新日期过滤 |
+| 上下文组装 | 总字数上限、相邻片段扩展（small-to-big）、片段排序（相关度 / 原文顺序 / 两头放最相关） |
+| 生成 | 系统提示词、用户消息模板、片段模板都可编辑；max_tokens、temperature（OpenAI 兼容）、effort（Claude） |
+| 流程追踪 | 每条回答下可展开：改写后的问题、多查询、HyDE 文本、过滤结果、检索统计、上下文组装、发送给模型的完整提示词、各步耗时 |
 | LLM | **Claude**（Anthropic 官方 SDK）和 **OpenAI 兼容接口**（OpenAI、DeepSeek、通义千问、Kimi、智谱、本地 Ollama…），网页上添加多个、设默认、测试连接，问答时下拉切换 |
 | 问答 | SSE 流式输出；先返回检索到的片段（含相似度），回答里用 [1][2] 标注来源；支持多轮对话、可随时停止 |
 | 检索算法 | 向量检索（余弦 / 点积 / 欧氏距离）、BM25 关键词、混合检索（RRF 排名融合或分数加权）、交叉编码器重排序、MMR 多样性、Top K、余弦相似度阈值，可任意组合 |
 | 检索调试 | 同一个问题用最多 4 种策略并排对比：每个片段显示余弦、点积、欧氏距离、BM25、混合、重排序、MMR 各项分数，以及它在其他策略里的排名；满意的策略一键设为问答默认 |
-| 参数 | 默认切分策略、问答默认检索策略、带几轮历史；改完默认切分策略可一键重建索引 |
+| RAG 流程页 | 按“切分 → 向量化 → 索引 → 问题处理 → 检索 → 上下文 → 生成”的顺序列出全部参数，每个环节都有原理说明；前三步改了会提示重建索引 |
 
 ## 快速开始
 
@@ -64,13 +69,13 @@ npm run dev                                           # 打开 http://localhost:
 
 首次启动会自动：
 - 导入示例文档 `backend/sample_docs/xinghe_handbook.md`（虚构的员工手册，数字都是编的，用来验证 RAG 是否生效）；
-- 添加一个 Claude Opus 5.5 的模型配置。到“模型与设置”里填 API Key，或者启动前设置环境变量 `ANTHROPIC_API_KEY`。
+- 添加一个 Claude Opus 5.5 的模型配置。到“LLM 模型”里填 API Key，或者启动前设置环境变量 `ANTHROPIC_API_KEY`。
 
 可以试着问：“出差住在上海每晚最多能报销多少？”“年假没休完能留到什么时候？”“公司的股票代码是多少？”（文档里没有，模型应该回答没找到）。
 
 ## 添加其他模型
 
-“模型与设置” → “添加模型” → 选预设，填 API Key 即可。预设的模型名只是示例，可以改成厂商当前提供的任何模型。
+“LLM 模型” → “添加模型” → 选预设，填 API Key 即可。预设的模型名只是示例，可以改成厂商当前提供的任何模型。
 
 | 预设 | 接口类型 | Base URL |
 |---|---|---|
@@ -114,18 +119,38 @@ npm run dev                                           # 打开 http://localhost:
 
 切片数量在几万以内时，检索直接用 numpy 对全部切片精确计算；数据量更大时，可以改成先用 Chroma 的近似检索取候选。
 
+## RAG 流程页（学习用）
+
+“🧪 RAG 流程”页按数据流动的顺序排列 7 个环节，每个环节可以展开“原理说明”：
+
+1. **文档切分**：五种切分算法（见上）
+2. **向量化**：切换 embedding 模型；“向量化实验”输入几句话，看维度、耗时和两两相似度
+3. **向量索引**：HNSW 参数；配合检索里的“精确 / HNSW”对比召回差异
+4. **问题处理**：结合历史改写、多查询、HyDE（每个会多调用一次 LLM）
+5. **检索**：同“检索调试”页的全部算法
+6. **上下文组装**：相邻片段扩展、排序、字数上限
+7. **生成**：提示词模板和生成参数
+
+前 3 步在导入文档时执行，改了以后页面顶部会提示“重建索引”（每种 embedding 模型 + 索引参数组合各用一个 Chroma 集合，切换回去不用重新算）。后 4 步每次提问时执行，保存后立即生效。
+
+建议的实验：
+- 把 embedding 换成“字符哈希”，问同一个问题，对比参考片段的变化；
+- 问一个追问（“那北京呢？”），对比开 / 关“结合历史改写”的检索结果；
+- 去掉系统提示词里“只依据片段回答”，问一个文档里没有的问题，看模型会不会编；
+- 在检索调试页把“精确计算”和“HNSW 候选 5”放两列，看召回差异。
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `RAG_DATA_DIR` | `backend/data` | SQLite、Chroma、模型缓存的目录 |
-| `RAG_EMBEDDER` | `fastembed` | 设成 `hash` 用离线的字符哈希向量（不下载模型，质量差，只用于测试） |
-| `RAG_EMBED_MODEL` | `BAAI/bge-small-zh-v1.5` | 任何 fastembed 支持的模型，英文文档可用 `BAAI/bge-small-en-v1.5` |
+| `RAG_EMBEDDER` | `fastembed` | 向量化方式的初始默认值（之后在网页上切换）；`hash` 为离线字符哈希 |
+| `RAG_EMBED_MODEL` | `BAAI/bge-small-zh-v1.5` | 初始默认的 fastembed 模型 |
 | `ANTHROPIC_API_KEY` | | Claude 配置里没填 key 时使用 |
 | `RAG_CORS_ORIGINS` | `http://localhost:5173` | 前后端分开部署时允许的前端地址，逗号分隔 |
 | `RAG_MAX_UPLOAD_MB` | `20` | 单个上传文件大小上限 |
 
-> 换 embedding 模型后，在“模型与设置”里点“重建索引”。每种模型用独立的 collection，原文在 SQLite 里，所以随时可以重建。
+> 换 embedding 模型或 HNSW 参数后，点页面顶部提示里的“重建索引”。原文在 SQLite 里，所以随时可以重建。
 
 ## 目录结构
 
@@ -137,6 +162,8 @@ backend/
     db.py                SQLite（文档原文、模型配置、设置）
     parsers.py           md / txt / pdf / docx → 纯文本
     chunker.py           五种切分策略
+    query.py             问题处理：结合历史改写、多查询、HyDE
+    context.py           上下文组装：相邻片段扩展、排序、字数上限
     embeddings.py        fastembed / hash 向量化
     store.py             Chroma 向量库：写入、删除、按文档过滤检索
     llm/                 LLM 统一接口：anthropic_provider.py、openai_provider.py
@@ -159,11 +186,14 @@ frontend/
 | GET | `/api/documents/{id}/chunks` | 查看切片 |
 | POST | `/api/documents/preview-chunks` | 试切不入库：content 或 doc_id，chunking（切分参数） |
 | POST | `/api/documents/reindex` | 用当前参数重建全部索引 |
-| POST | `/api/search` | 只检索：query, doc_ids, retrieval（检索参数，不填的用默认策略） |
+| POST | `/api/search` | 只检索：query, retrieval（检索参数，不填的用默认策略），过滤 doc_ids / tags / date_from / date_to |
 | POST | `/api/search/compare` | 多策略对比：query, doc_ids, strategies（最多 6 个） |
-| POST | `/api/chat` | 问答（SSE）：query, provider_id, doc_ids, history, retrieval；事件依次为 sources、delta…、done 或 error |
+| POST | `/api/chat` | 问答（SSE）：query, provider_id, history, retrieval, 过滤条件；事件依次为 trace、sources、delta…、done 或 error |
 | GET/POST/PUT/DELETE | `/api/providers[/{id}]` | 模型配置；`POST /{id}/default` 设默认，`POST /{id}/test` 测试连接 |
-| GET/PUT | `/api/settings` | 检索与切片参数 |
+| GET/PUT | `/api/settings` | RAG 流程各环节参数（chunking / embedding / index / query / retrieval / context / generation）；`POST /api/settings/{分组}/reset` 恢复默认 |
+| GET | `/api/embedding/models` | 常用 embedding 模型列表 |
+| POST | `/api/embedding/test` | 向量化实验：texts，可用 query 参数临时指定 backend / model / provider_id |
+| GET | `/api/documents/tags` | 所有标签 |
 
 启动后访问 http://localhost:8000/docs 可以看到自动生成的接口文档。
 
@@ -175,7 +205,7 @@ cd backend && pytest
 
 ## 后续可以加的
 
-- 多查询改写 / HyDE、small-to-big（命中小切片后返回所在大段落）
-- 切片带日期等元数据，按时间过滤
+- 换用 FAISS / Qdrant / Milvus 等其他向量库
+- 父子切片（parent-child）、按 token 计数切分
 - 多用户登录和每人独立的知识库
 - 扫描版 PDF 的 OCR

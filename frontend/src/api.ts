@@ -16,6 +16,7 @@ export interface DocumentMeta {
   char_count: number;
   chunking_custom: boolean; // 是否单独设置了切分策略
   chunking_strategy?: ChunkStrategy;
+  tags: string[];
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +46,8 @@ export interface RetrievalParams {
   use_mmr: boolean;
   mmr_lambda: number;
   use_rerank: boolean;
+  index: "exact" | "hnsw";
+  ann_candidates: number;
 }
 export interface HitScores {
   cosine: number;
@@ -56,6 +59,8 @@ export interface HitScores {
   hybrid?: number;
   mmr?: number;
   rerank?: number;
+  multi_query_rrf?: number;
+  matched_queries?: number;
 }
 export interface Hit {
   doc_id: string;
@@ -71,6 +76,80 @@ export interface CompareResult {
   hits: Hit[];
   error: string | null;
   elapsed_ms: number;
+  searched: number | null; // 实际参与打分的切片数（HNSW 模式下是候选数）
+}
+/** 最终放进提示词的一段参考资料（可能由多个相邻切片合并而成） */
+export interface Source extends Hit {
+  indexes: number[];
+  hit_indexes: number[];
+}
+export interface Trace {
+  question: string;
+  provider: string;
+  condensed_query?: string;
+  multi_queries?: string[];
+  hyde_text?: string;
+  filter?: Record<string, unknown> & { matched_documents: number };
+  retrieval: {
+    params: RetrievalParams;
+    per_query: { query: string; hits: number; corpus?: number; searched?: number; index?: string }[];
+    hits: number;
+  };
+  context: ContextParams & { hits: number; blocks: number; dropped: number; chars: number };
+  prompt: { system: string; messages: ChatTurn[]; llm_params: Record<string, unknown> };
+  timings: Record<string, number>;
+}
+export interface Filters {
+  doc_ids?: string[];
+  tags?: string[];
+  date_from?: string;
+  date_to?: string;
+}
+export interface EmbeddingSettings {
+  backend: "fastembed" | "openai" | "hash";
+  model: string;
+  provider_id: string | null;
+}
+export interface IndexSettings {
+  space: "cosine" | "l2" | "ip";
+  max_neighbors: number;
+  ef_construction: number;
+  ef_search: number;
+}
+export interface QuerySettings {
+  history_turns: number;
+  condense_history: boolean;
+  multi_query: boolean;
+  multi_query_n: number;
+  hyde: boolean;
+}
+export interface ContextParams {
+  max_chars: number;
+  neighbor_window: number;
+  order: "score" | "document" | "edges";
+}
+export interface GenerationSettings {
+  system_prompt: string;
+  user_template: string;
+  source_template: string;
+  max_tokens: number | null;
+  temperature: number | null;
+  effort: string | null;
+}
+export interface EmbeddingModelInfo {
+  model: string;
+  dim: number;
+  size: string;
+  lang: string;
+  note: string;
+}
+export interface EmbeddingTestResult {
+  embedder: string;
+  dim: number;
+  elapsed_ms: number;
+  norms: number[];
+  similarity: number[][];
+  preview: number[][];
 }
 export type ProviderType = "anthropic" | "openai";
 export interface Provider {
@@ -94,15 +173,22 @@ export interface ProviderInput {
 }
 export interface Settings {
   chunking: ChunkingParams;
+  embedding: EmbeddingSettings;
+  index: IndexSettings;
+  query: QuerySettings;
   retrieval: RetrievalParams;
-  history_turns: number;
+  context: ContextParams;
+  generation: GenerationSettings;
   default_provider_id: string | null;
 }
+export type SectionName = Exclude<keyof Settings, "default_provider_id">;
 export interface Health {
   status: string;
-  embedder: string;
+  message?: string;
+  embedder?: string;
   documents: number;
-  chunks: number;
+  chunks?: number;
+  needs_reindex?: boolean;
 }
 export interface ChatTurn {
   role: "user" | "assistant";
@@ -137,8 +223,12 @@ export const api = {
 
   listDocuments: () => request<DocumentMeta[]>("/api/documents"),
   getDocument: (id: string) => request<DocumentFull>(`/api/documents/${id}`),
-  createDocument: (name: string, content: string) => request<DocumentFull>("/api/documents", json("POST", { name, content })),
-  updateDocument: (id: string, data: { name?: string; content?: string; chunking?: ChunkingParams; use_default_chunking?: boolean }) =>
+  createDocument: (name: string, content: string, tags: string[] = []) =>
+    request<DocumentFull>("/api/documents", json("POST", { name, content, tags })),
+  updateDocument: (
+    id: string,
+    data: { name?: string; content?: string; chunking?: ChunkingParams; use_default_chunking?: boolean; tags?: string[] },
+  ) =>
     request<DocumentFull>(`/api/documents/${id}`, json("PUT", data)),
   deleteDocument: (id: string) => request<void>(`/api/documents/${id}`, json("DELETE")),
   getChunks: (id: string) => request<Chunk[]>(`/api/documents/${id}/chunks`),
@@ -154,10 +244,12 @@ export const api = {
     request<ChunkPreview>("/api/documents/preview-chunks", json("POST", { chunking, ...src })),
   reindex: () => request<{ documents: number; chunks: number }>("/api/documents/reindex", json("POST")),
 
-  search: (query: string, retrieval: Partial<RetrievalParams>, doc_ids?: string[]) =>
-    request<Hit[]>("/api/search", json("POST", { query, retrieval, doc_ids })),
-  compare: (query: string, strategies: (Partial<RetrievalParams> & { label: string })[], doc_ids?: string[]) =>
-    request<CompareResult[]>("/api/search/compare", json("POST", { query, strategies, doc_ids })),
+  listTags: () => request<string[]>("/api/documents/tags"),
+
+  search: (query: string, retrieval: Partial<RetrievalParams>, filters: Filters = {}) =>
+    request<Hit[]>("/api/search", json("POST", { query, retrieval, ...filters })),
+  compare: (query: string, strategies: (Partial<RetrievalParams> & { label: string })[], filters: Filters = {}) =>
+    request<CompareResult[]>("/api/search/compare", json("POST", { query, strategies, ...filters })),
 
   listProviders: () => request<Provider[]>("/api/providers"),
   createProvider: (p: ProviderInput) => request<Provider>("/api/providers", json("POST", p)),
@@ -167,19 +259,26 @@ export const api = {
   testProvider: (id: string) => request<{ ok: boolean; message: string }>(`/api/providers/${id}/test`, json("POST")),
 
   getSettings: () => request<Settings>("/api/settings"),
-  updateSettings: (s: Partial<Omit<Settings, "retrieval">> & { retrieval?: Partial<RetrievalParams> }) => request<Settings>("/api/settings", json("PUT", s)),
+  updateSettings: (s: { [K in SectionName]?: Partial<Settings[K]> }) => request<Settings>("/api/settings", json("PUT", s)),
+  resetSection: (name: SectionName) => request<Settings>(`/api/settings/${name}/reset`, json("POST")),
+  embeddingModels: () => request<EmbeddingModelInfo[]>("/api/embedding/models"),
+  embeddingTest: (texts: string[], override?: Partial<EmbeddingSettings>) => {
+    const qs = new URLSearchParams(Object.entries(override ?? {}).filter(([, v]) => v) as [string, string][]).toString();
+    return request<EmbeddingTestResult>(`/api/embedding/test${qs ? `?${qs}` : ""}`, json("POST", { texts }));
+  },
 };
 
 export interface ChatHandlers {
-  onSources: (hits: Hit[]) => void;
+  onTrace: (trace: Trace) => void;
+  onSources: (sources: Source[]) => void;
   onDelta: (text: string) => void;
   onError: (message: string) => void;
-  onDone: () => void;
+  onDone: (info: { generation_ms?: number }) => void;
 }
 
 /** 流式问答：解析后端的 SSE（sources → delta… → done/error）。 */
 export async function streamChat(
-  body: { query: string; provider_id?: string; doc_ids?: string[]; history: ChatTurn[]; retrieval?: Partial<RetrievalParams> },
+  body: { query: string; provider_id?: string; history: ChatTurn[]; retrieval?: Partial<RetrievalParams> } & Filters,
   handlers: ChatHandlers,
   signal?: AbortSignal,
 ) {
@@ -212,14 +311,15 @@ export async function streamChat(
         else if (line.startsWith("data: ")) data += line.slice(6);
       }
       const payload = data ? JSON.parse(data) : {};
-      if (event === "sources") handlers.onSources(payload);
+      if (event === "trace") handlers.onTrace(payload);
+      else if (event === "sources") handlers.onSources(payload);
       else if (event === "delta") handlers.onDelta(payload.text);
       else if (event === "error") {
         finished = true;
         handlers.onError(payload.message);
       } else if (event === "done") {
         finished = true;
-        handlers.onDone();
+        handlers.onDone(payload);
       }
     }
   }

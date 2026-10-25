@@ -30,7 +30,7 @@ def list_documents():
 
 @router.post("")
 def create_document(body: DocumentCreate):
-    return _get_or_404(svc.create_document, body.name, body.content, "md", _full_chunking(body.chunking))
+    return _get_or_404(svc.create_document, body.name, body.content, "md", _full_chunking(body.chunking), body.tags)
 
 
 @router.post("/upload")
@@ -53,6 +53,11 @@ def upload_documents(files: list[UploadFile] = File(...)):
         doc = svc.create_document(f.filename, text, file_type)
         results.append({"filename": f.filename, "document": {k: v for k, v in doc.items() if k != "content"}})
     return results
+
+
+@router.get("/tags")
+def list_tags():
+    return svc.all_tags()
 
 
 @router.post("/preview-chunks")
@@ -87,7 +92,7 @@ def update_document(doc_id: str, body: DocumentUpdate):
         kwargs["chunking"] = None
     elif body.chunking is not None:
         kwargs["chunking"] = _full_chunking(body.chunking)
-    return _get_or_404(svc.update_document, doc_id, body.name, body.content, **kwargs)
+    return _get_or_404(svc.update_document, doc_id, body.name, body.content, tags=body.tags, **kwargs)
 
 
 @router.delete("/{doc_id}", status_code=204)

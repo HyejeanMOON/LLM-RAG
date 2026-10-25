@@ -9,6 +9,7 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
   const [mode, setMode] = useState<Mode>({ kind: "none" });
   const [doc, setDoc] = useState<DocumentFull | null>(null);
   const [name, setName] = useState("");
+  const [tags, setTags] = useState("");
   const [content, setContent] = useState("");
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [view, setView] = useState<"content" | "chunks">("content");
@@ -29,6 +30,7 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
     const [d, cs] = await Promise.all([api.getDocument(id), api.getChunks(id)]);
     setDoc(d);
     setName(d.name);
+    setTags(d.tags.join(", "));
     setContent(d.content);
     setChunks(cs);
     setChunking(d.chunking);
@@ -40,6 +42,7 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
     setMode({ kind: "new" });
     setDoc(null);
     setName("");
+    setTags("");
     setContent("");
     setChunks([]);
     setView("content");
@@ -59,7 +62,8 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
 
   const save = () =>
     run(async () => {
-      const d = mode.kind === "new" ? await api.createDocument(name, content) : await api.updateDocument(doc!.id, { name, content });
+      const d =
+        mode.kind === "new" ? await api.createDocument(name, content, tagList) : await api.updateDocument(doc!.id, { name, content, tags: tagList });
       await reload();
       onChanged();
       await open(d.id);
@@ -105,7 +109,10 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
       if (first) await open(first.id);
     });
 
-  const dirty = doc ? name !== doc.name || content !== doc.content : mode.kind === "new" && (name || content);
+  const tagList = tags.split(/[,，]/).map((t) => t.trim()).filter(Boolean);
+  const dirty = doc
+    ? name !== doc.name || content !== doc.content || tagList.join(",") !== doc.tags.join(",")
+    : mode.kind === "new" && (name || content);
 
   return (
     <div className="docs">
@@ -150,6 +157,15 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
                 open(d.id);
               }}>
               <div className="doc-name">{d.name}</div>
+              {d.tags.length > 0 && (
+                <div className="score-tags">
+                  {d.tags.map((t) => (
+                    <span key={t} className="tag">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="muted small">
                 {d.file_type} · {d.char_count} 字 · {d.chunk_count} 个切片
                 {d.chunking_strategy && ` · ${STRATEGY_LABEL[d.chunking_strategy]}${d.chunking_custom ? "（单独设置）" : ""}`}
@@ -169,6 +185,13 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
           <>
             <div className="row">
               <input className="grow" value={name} placeholder="文档名称" onChange={(e) => setName(e.target.value)} />
+              <input
+                value={tags}
+                placeholder="标签，逗号分隔（用于检索过滤）"
+                title="给文档打标签后，问答和检索调试时可以只在某些标签的文档里检索"
+                onChange={(e) => setTags(e.target.value)}
+                style={{ width: 220 }}
+              />
               <button onClick={save} disabled={busy || !name.trim() || !content.trim() || !dirty}>
                 {busy ? "处理中…" : mode.kind === "new" ? "创建并入库" : "保存并重新切片"}
               </button>

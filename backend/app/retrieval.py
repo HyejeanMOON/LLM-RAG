@@ -11,7 +11,11 @@
   5. 按余弦相似度阈值 min_score 过滤，取前 top_k 个
 
 每个结果都带上所有算法的分数（scores），方便在前端对比。
-数据量在几万个切片以内时，这里直接用 numpy 对全部切片暴力计算，结果精确且足够快。
+索引方式（index）：
+  - exact：用 numpy 对全部切片精确计算（暴力检索），结果最准，几万个切片以内足够快；
+  - hnsw ：先用 Chroma 的 HNSW 图做近似最近邻（ANN）召回 ann_candidates 个候选，
+           再和 BM25 的前 ann_candidates 个候选合并，只在候选里打分。数据量大时快得多，
+           但可能漏掉真正最相近的片段（召回率 < 100%），可以在“检索调试”里和 exact 对比。
 """
 import math
 import re
@@ -22,7 +26,6 @@ from typing import Literal
 
 import numpy as np
 
-from .store import get_store
 
 Method = Literal["vector", "bm25", "hybrid"]
 Metric = Literal["cosine", "dot", "l2"]
@@ -44,6 +47,8 @@ class RetrievalParams:
     use_mmr: bool = False
     mmr_lambda: float = 0.5       # 1 = 只看相关性，0 = 只看多样性
     use_rerank: bool = False
+    index: Literal["exact", "hnsw"] = "exact"
+    ann_candidates: int = 50      # hnsw 模式下向量和 BM25 各召回多少个候选
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -138,25 +143,34 @@ def rerank_scores(query: str, texts: list[str]) -> np.ndarray:
 
 # ---------- 主函数 ----------
 
-def retrieve(query: str, params: RetrievalParams, doc_ids: list[str] | None = None) -> list[dict]:
-    corpus = get_store().load_corpus()
-    idx = [
-        i for i, m in enumerate(corpus["metas"])
-        if not doc_ids or m["doc_id"] in doc_ids
-    ]
+def retrieve(store, query: str, params: RetrievalParams, doc_ids: list[str] | None = None,
+             vector_text: str | None = None, trace: dict | None = None) -> list[dict]:
+    """doc_ids 为 None 表示不过滤；vector_text 用于 HyDE：向量检索用它，BM25 仍用 query。"""
+    corpus = store.load_corpus()
+    allowed = None if doc_ids is None else set(doc_ids)
+    idx = [i for i, m in enumerate(corpus["metas"]) if allowed is None or m["doc_id"] in allowed]
+    q = np.asarray(store.embedder.embed_query(vector_text or query), dtype=np.float32)
+    # BM25 的 IDF 依赖整个语料，所以先在全部（过滤后的）切片上算好
+    bm25_all = dict(zip(idx, bm25_scores(query, [corpus["texts"][i] for i in idx])))
+
+    if params.index == "hnsw" and idx:
+        # 向量走 HNSW 近似召回，关键词走 BM25 召回，两路候选取并集
+        ann_ids = set(store.ann_search(q.tolist(), params.ann_candidates, doc_ids))
+        bm25_top = {i for i in sorted(idx, key=lambda i: -bm25_all[i])[: params.ann_candidates] if bm25_all[i] > 0}
+        idx = [i for i in idx if corpus["ids"][i] in ann_ids or i in bm25_top]
+    if trace is not None:
+        trace.update({"corpus": len(corpus["ids"]), "searched": len(idx), "index": params.index})
     if not idx:
         return []
     texts = [corpus["texts"][i] for i in idx]
     metas = [corpus["metas"][i] for i in idx]
     vecs = corpus["embeddings"][idx]
 
-    q = np.asarray(get_store().embedder.embed_query(query), dtype=np.float32)
-
     # 1. 各种基础分数都算出来，前端可以对比
     dot = vecs @ q
     cosine = _normalize(vecs) @ _normalize(q)
     l2 = np.linalg.norm(vecs - q, axis=1)
-    bm25 = bm25_scores(query, texts)
+    bm25 = np.array([bm25_all[i] for i in idx])
     vector_score = {"cosine": cosine, "dot": dot, "l2": -l2}[params.metric]
     vec_rank, bm25_rank = _ranks(vector_score), _ranks(bm25)
 

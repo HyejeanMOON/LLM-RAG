@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS documents (
     file_type   TEXT NOT NULL,
     chunk_count INTEGER NOT NULL DEFAULT 0,
     chunking    TEXT,                   -- 这篇文档单独的切分策略(JSON)，NULL 表示用全局默认
+    tags        TEXT NOT NULL DEFAULT '',  -- 逗号分隔的标签，用于检索时按元数据过滤
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
@@ -66,6 +67,8 @@ def init():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(documents)")}
         if "chunking" not in cols:
             conn.execute("ALTER TABLE documents ADD COLUMN chunking TEXT")
+        if "tags" not in cols:
+            conn.execute("ALTER TABLE documents ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
 
 
 def get_setting(key: str, default=None):

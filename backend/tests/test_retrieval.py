@@ -118,5 +118,5 @@ def test_default_strategy_used_by_chat(corpus, monkeypatch):
     monkeypatch.setattr("app.services.rag.create_llm", FakeLLM)
     import json
     text = corpus.post("/api/chat", json={"query": "班车几点"}).text
-    sources = json.loads(text.split("\n\n")[0].split("data: ", 1)[1])
+    sources = json.loads(text.split("\n\n")[1].split("data: ", 1)[1])
     assert len(sources) == 2 and sources[0]["scores"]["bm25_rank"] == 1

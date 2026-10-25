@@ -22,6 +22,8 @@ export default function SearchPage({ version, onChanged }: { version: number; on
   const [query, setQuery] = useState("");
   const [docs, setDocs] = useState<DocumentMeta[]>([]);
   const [docId, setDocId] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tag, setTag] = useState("");
   const [columns, setColumns] = useState<Column[]>(PRESETS.map((p) => ({ label: "", params: p, editing: false })));
   const [results, setResults] = useState<CompareResult[] | null>(null);
   const [error, setError] = useState("");
@@ -30,6 +32,7 @@ export default function SearchPage({ version, onChanged }: { version: number; on
 
   useEffect(() => {
     api.listDocuments().then(setDocs);
+    api.listTags().then(setTags);
   }, [version]);
 
   const updateColumn = (i: number, patch: Partial<Column>) =>
@@ -42,7 +45,7 @@ export default function SearchPage({ version, onChanged }: { version: number; on
     setBusy(true);
     try {
       const strategies = columns.map((c) => ({ ...c.params, label: c.label || describe(c.params) }));
-      setResults(await api.compare(query, strategies, docId ? [docId] : undefined));
+      setResults(await api.compare(query, strategies, { doc_ids: docId ? [docId] : undefined, tags: tag ? [tag] : undefined }));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -77,6 +80,16 @@ export default function SearchPage({ version, onChanged }: { version: number; on
             </option>
           ))}
         </select>
+        {tags.length > 0 && (
+          <select value={tag} onChange={(e) => setTag(e.target.value)}>
+            <option value="">全部标签</option>
+            {tags.map((t) => (
+              <option key={t} value={t}>
+                标签：{t}
+              </option>
+            ))}
+          </select>
+        )}
         <button onClick={run} disabled={busy || !query.trim()}>
           {busy ? "检索中…" : "对比检索"}
         </button>
@@ -123,7 +136,11 @@ export default function SearchPage({ version, onChanged }: { version: number; on
                   )}
                 </div>
                 {c.editing && <StrategyEditor compact value={c.params} onChange={(params) => updateColumn(i, { params })} />}
-                {r && <div className="muted small">耗时 {r.elapsed_ms} ms · {r.hits.length} 个结果</div>}
+                {r && (
+                  <div className="muted small">
+                    耗时 {r.elapsed_ms} ms · 打分 {r.searched ?? "-"} 个切片 · {r.hits.length} 个结果
+                  </div>
+                )}
               </div>
               {r?.error && <div className="notice error">{r.error}</div>}
               {r && !r.error && r.hits.length === 0 && <p className="muted">没有结果（可能被阈值过滤掉了）</p>}
