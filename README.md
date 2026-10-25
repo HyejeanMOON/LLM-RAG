@@ -19,14 +19,14 @@
 | 功能 | 说明 |
 |---|---|
 | 文档管理 | 上传 .md / .txt / .pdf / .docx（可多选、拖拽），也能直接粘贴新建；在线编辑后自动重新切片入库；删除时向量一起删 |
-| 切片 | 按 Markdown 标题分节（Word 标题样式会转成 Markdown 标题）→ 按句子切 → 拼成不超过 N 字、带重叠的块，块前加小节标题 |
+| 切分算法 | 标题 + 句子、固定长度、按段落、递归切分、语义切分五种，可调长度、重叠、是否加小节标题；设置全局默认，也可以每篇文档单独设置，应用前能并排预览切片效果 |
 | 向量化 | 默认 [fastembed](https://github.com/qdrant/fastembed) 本地运行 `BAAI/bge-small-zh-v1.5`，免费、不需要 Key |
 | 向量库 | [Chroma](https://www.trychroma.com/)，本地持久化，余弦相似度；每篇文档的切片带 `doc_id`，支持只在指定文档里检索 |
 | LLM | **Claude**（Anthropic 官方 SDK）和 **OpenAI 兼容接口**（OpenAI、DeepSeek、通义千问、Kimi、智谱、本地 Ollama…），网页上添加多个、设默认、测试连接，问答时下拉切换 |
 | 问答 | SSE 流式输出；先返回检索到的片段（含相似度），回答里用 [1][2] 标注来源；支持多轮对话、可随时停止 |
 | 检索算法 | 向量检索（余弦 / 点积 / 欧氏距离）、BM25 关键词、混合检索（RRF 排名融合或分数加权）、交叉编码器重排序、MMR 多样性、Top K、余弦相似度阈值，可任意组合 |
 | 检索调试 | 同一个问题用最多 4 种策略并排对比：每个片段显示余弦、点积、欧氏距离、BM25、混合、重排序、MMR 各项分数，以及它在其他策略里的排名；满意的策略一键设为问答默认 |
-| 参数 | 切片长度、重叠、问答默认检索策略、带几轮历史；改完切片参数可一键重建索引 |
+| 参数 | 默认切分策略、问答默认检索策略、带几轮历史；改完默认切分策略可一键重建索引 |
 
 ## 快速开始
 
@@ -84,6 +84,20 @@ npm run dev                                           # 打开 http://localhost:
 
 “高级参数”是 JSON：Claude 支持 `effort`（`low`/`medium`/`high`）和 `max_tokens`；OpenAI 兼容接口支持 `temperature`。
 
+## 切分算法说明
+
+代码在 `backend/app/chunker.py`。除“固定长度”外，切片都不会跨 Markdown 小节（Word 的标题样式上传时会转成 Markdown 标题）。
+
+| 策略 | 做法 | 适合 |
+|---|---|---|
+| 标题 + 句子（默认） | 节内按句子切开，拼成不超过切片长度的块，相邻块重叠 | 大多数文档 |
+| 固定长度 | 每隔固定字数切一刀，滑动窗口重叠 | 没有结构的纯文本，或做对照实验 |
+| 按段落 | 按空行分段，短段落合并，长段落再按句子切 | 段落分明的文章 |
+| 递归切分 | 依次用 段落 → 换行 → 句号 → 逗号 → 空格 → 单字 切，尽量在大边界断开 | 结构不规整的文本 |
+| 语义切分 | 相邻句子向量化，在语义距离超过第 N 百分位的地方断开 | 话题跳跃多的长文 |
+
+在“文档管理 → 切片”里可以选策略、点“预览效果”和当前切片并排比较，满意后“应用到这篇文档”。单独设置过的文档不受全局默认和“重建索引”影响，可以随时“恢复使用全局默认”。
+
 ## 检索算法说明
 
 代码在 `backend/app/retrieval.py`，流程是：打分 → 取候选 → （可选）重排序 → （可选）MMR → 阈值过滤 → 取 Top K。
@@ -122,7 +136,7 @@ backend/
     config.py            路径和环境变量
     db.py                SQLite（文档原文、模型配置、设置）
     parsers.py           md / txt / pdf / docx → 纯文本
-    chunker.py           切片
+    chunker.py           五种切分策略
     embeddings.py        fastembed / hash 向量化
     store.py             Chroma 向量库：写入、删除、按文档过滤检索
     llm/                 LLM 统一接口：anthropic_provider.py、openai_provider.py
@@ -141,8 +155,9 @@ frontend/
 |---|---|---|
 | GET/POST | `/api/documents` | 文档列表 / 新建（JSON: name, content） |
 | POST | `/api/documents/upload` | 上传文件（multipart，字段名 files，可多个） |
-| GET/PUT/DELETE | `/api/documents/{id}` | 查看 / 修改（自动重新切片）/ 删除 |
+| GET/PUT/DELETE | `/api/documents/{id}` | 查看 / 修改（自动重新切片；可传 chunking 单独设置切分策略，或 use_default_chunking 恢复默认）/ 删除 |
 | GET | `/api/documents/{id}/chunks` | 查看切片 |
+| POST | `/api/documents/preview-chunks` | 试切不入库：content 或 doc_id，chunking（切分参数） |
 | POST | `/api/documents/reindex` | 用当前参数重建全部索引 |
 | POST | `/api/search` | 只检索：query, doc_ids, retrieval（检索参数，不填的用默认策略） |
 | POST | `/api/search/compare` | 多策略对比：query, doc_ids, strategies（最多 6 个） |

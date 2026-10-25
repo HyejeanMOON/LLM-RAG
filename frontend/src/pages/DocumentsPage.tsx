@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type Chunk, type DocumentFull, type DocumentMeta } from "../api";
+import { api, type Chunk, type ChunkingParams, type ChunkPreview, type DocumentFull, type DocumentMeta } from "../api";
+import ChunkingEditor, { DEFAULT_CHUNKING, STRATEGY_LABEL, describeChunking } from "../components/ChunkingEditor";
 
 type Mode = { kind: "none" } | { kind: "new" } | { kind: "edit"; id: string };
 
@@ -11,6 +12,8 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
   const [content, setContent] = useState("");
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [view, setView] = useState<"content" | "chunks">("content");
+  const [chunking, setChunking] = useState<ChunkingParams>(DEFAULT_CHUNKING);
+  const [preview, setPreview] = useState<(ChunkPreview & { params: ChunkingParams }) | null>(null);
   const [msg, setMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -28,6 +31,8 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
     setName(d.name);
     setContent(d.content);
     setChunks(cs);
+    setChunking(d.chunking);
+    setPreview(null);
   }
 
   function startNew() {
@@ -59,6 +64,21 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
       onChanged();
       await open(d.id);
       setMsg({ type: "ok", text: `已保存并重新切片，共 ${d.chunk_count} 个切片` });
+    });
+
+  const runPreview = () =>
+    run(async () => {
+      // 预览用编辑框里的内容（可能还没保存）
+      setPreview({ ...(await api.previewChunks(chunking, { content })), params: chunking });
+    });
+
+  const applyChunking = (useDefault: boolean) =>
+    run(async () => {
+      const d = await api.updateDocument(doc!.id, useDefault ? { use_default_chunking: true } : { chunking, name, content });
+      await reload();
+      onChanged();
+      await open(d.id);
+      setMsg({ type: "ok", text: `已按「${describeChunking(d.chunking)}」重新切片，共 ${d.chunk_count} 个切片` });
     });
 
   const remove = () => {
@@ -131,7 +151,10 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
               }}>
               <div className="doc-name">{d.name}</div>
               <div className="muted small">
-                {d.file_type} · {d.char_count} 字 · {d.chunk_count} 个切片 · {new Date(d.updated_at).toLocaleString()}
+                {d.file_type} · {d.char_count} 字 · {d.chunk_count} 个切片
+                {d.chunking_strategy && ` · ${STRATEGY_LABEL[d.chunking_strategy]}${d.chunking_custom ? "（单独设置）" : ""}`}
+                <br />
+                {new Date(d.updated_at).toLocaleString()}
               </div>
             </li>
           ))}
@@ -173,15 +196,60 @@ export default function DocumentsPage({ version, onChanged }: { version: number;
                 onChange={(e) => setContent(e.target.value)}
               />
             ) : (
-              <div className="chunk-list">
-                {chunks.map((c) => (
-                  <div key={c.index} className="chunk">
-                    <div className="muted small">
-                      #{c.index} · {c.text.length} 字
-                    </div>
-                    <div>{c.text}</div>
+              <div className="chunk-view">
+                <div className="chunking-panel">
+                  <div className="row">
+                    <strong>切分策略</strong>
+                    <span className="muted small">
+                      当前：{describeChunking(doc.chunking)}（{doc.chunking_custom ? "这篇文档单独设置" : "使用全局默认"}）
+                    </span>
                   </div>
-                ))}
+                  <ChunkingEditor value={chunking} onChange={setChunking} />
+                  <div className="row">
+                    <button className="secondary" onClick={runPreview} disabled={busy}>
+                      预览效果
+                    </button>
+                    <button onClick={() => applyChunking(false)} disabled={busy}>
+                      应用到这篇文档
+                    </button>
+                    {doc.chunking_custom && (
+                      <button className="secondary" onClick={() => applyChunking(true)} disabled={busy}>
+                        恢复使用全局默认
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className={`chunk-columns ${preview ? "two" : ""}`}>
+                  <div className="chunk-list">
+                    <div className="col-label">
+                      当前切片（{chunks.length}）
+                    </div>
+                    {chunks.map((c) => (
+                      <div key={c.index} className="chunk">
+                        <div className="muted small">
+                          #{c.index} · {c.text.length} 字
+                        </div>
+                        <div>{c.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {preview && (
+                    <div className="chunk-list">
+                      <div className="col-label">
+                        预览：{describeChunking(preview.params)}（{preview.stats.count} 个，平均 {preview.stats.avg_len} 字，最短 {preview.stats.min_len}，最长{" "}
+                        {preview.stats.max_len}）
+                      </div>
+                      {preview.chunks.map((c, i) => (
+                        <div key={i} className="chunk preview">
+                          <div className="muted small">
+                            #{i} · {c.length} 字
+                          </div>
+                          <div>{c}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </>

@@ -2,8 +2,9 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from .. import config
 from ..parsers import UnsupportedFile, extract_text
-from ..schemas import DocumentCreate, DocumentUpdate
+from ..schemas import ChunkPreviewRequest, DocumentCreate, DocumentUpdate
 from ..services import documents as svc
+from ..services import settings
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -13,6 +14,13 @@ def _get_or_404(fn, *args, **kwargs):
         return fn(*args, **kwargs)
     except svc.NotFound:
         raise HTTPException(404, "文档不存在")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+def _full_chunking(opts) -> dict | None:
+    """前端可能只传了部分字段，用全局默认补齐后再保存。"""
+    return settings.chunking_params(opts.model_dump(exclude_none=True)).to_dict() if opts else None
 
 
 @router.get("")
@@ -22,7 +30,7 @@ def list_documents():
 
 @router.post("")
 def create_document(body: DocumentCreate):
-    return svc.create_document(body.name, body.content, "md")
+    return _get_or_404(svc.create_document, body.name, body.content, "md", _full_chunking(body.chunking))
 
 
 @router.post("/upload")
@@ -47,6 +55,21 @@ def upload_documents(files: list[UploadFile] = File(...)):
     return results
 
 
+@router.post("/preview-chunks")
+def preview_chunks(body: ChunkPreviewRequest):
+    """用指定策略试切一段文本或一篇已有文档，不入库。"""
+    content = body.content
+    if content is None:
+        if not body.doc_id:
+            raise HTTPException(400, "需要 content 或 doc_id")
+        content = _get_or_404(svc.get_document, body.doc_id)["content"]
+    params = settings.chunking_params(body.chunking.model_dump(exclude_none=True))
+    try:
+        return svc.preview_chunks(content, params)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/reindex")
 def reindex():
     return svc.reindex_all()
@@ -59,7 +82,12 @@ def get_document(doc_id: str):
 
 @router.put("/{doc_id}")
 def update_document(doc_id: str, body: DocumentUpdate):
-    return _get_or_404(svc.update_document, doc_id, body.name, body.content)
+    kwargs = {}
+    if body.use_default_chunking:
+        kwargs["chunking"] = None
+    elif body.chunking is not None:
+        kwargs["chunking"] = _full_chunking(body.chunking)
+    return _get_or_404(svc.update_document, doc_id, body.name, body.content, **kwargs)
 
 
 @router.delete("/{doc_id}", status_code=204)

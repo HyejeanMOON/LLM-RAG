@@ -1,16 +1,39 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+class ChunkingOptions(BaseModel):
+    strategy: Literal["structure", "fixed", "paragraph", "recursive", "semantic"] | None = None
+    chunk_size: int | None = Field(default=None, ge=20, le=4000)
+    chunk_overlap: int | None = Field(default=None, ge=0, le=1000)
+    add_title: bool | None = None
+    semantic_percentile: int | None = Field(default=None, ge=1, le=99)
+
+    @model_validator(mode="after")
+    def _overlap_lt_size(self):
+        if self.chunk_size is not None and self.chunk_overlap is not None and self.chunk_overlap >= self.chunk_size:
+            raise ValueError("重叠长度必须小于切片长度")
+        return self
 
 
 class DocumentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1)
+    chunking: ChunkingOptions | None = None  # 不传表示用全局默认
 
 
 class DocumentUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     content: str | None = Field(default=None, min_length=1)
+    chunking: ChunkingOptions | None = None
+    use_default_chunking: bool = False  # true：去掉这篇文档的单独设置，改回全局默认
+
+
+class ChunkPreviewRequest(BaseModel):
+    content: str | None = None   # 直接给文本，或者
+    doc_id: str | None = None    # 给文档 id
+    chunking: ChunkingOptions = ChunkingOptions()
 
 
 class RetrievalOptions(BaseModel):
@@ -76,7 +99,6 @@ class ProviderUpdate(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
-    chunk_size: int | None = Field(default=None, ge=50, le=4000)
-    chunk_overlap: int | None = Field(default=None, ge=0, le=1000)
+    chunking: ChunkingOptions | None = None
     retrieval: RetrievalOptions | None = None
     history_turns: int | None = Field(default=None, ge=0, le=20)

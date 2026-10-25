@@ -1,16 +1,31 @@
 // 后端接口的类型和调用封装
 
+export type ChunkStrategy = "structure" | "fixed" | "paragraph" | "recursive" | "semantic";
+export interface ChunkingParams {
+  strategy: ChunkStrategy;
+  chunk_size: number;
+  chunk_overlap: number;
+  add_title: boolean;
+  semantic_percentile: number;
+}
 export interface DocumentMeta {
   id: string;
   name: string;
   file_type: string;
   chunk_count: number;
   char_count: number;
+  chunking_custom: boolean; // 是否单独设置了切分策略
+  chunking_strategy?: ChunkStrategy;
   created_at: string;
   updated_at: string;
 }
 export interface DocumentFull extends DocumentMeta {
   content: string;
+  chunking: ChunkingParams; // 实际生效的切分策略
+}
+export interface ChunkPreview {
+  chunks: string[];
+  stats: { count: number; avg_len: number; min_len: number; max_len: number };
 }
 export interface Chunk {
   index: number;
@@ -78,8 +93,7 @@ export interface ProviderInput {
   extra: Record<string, unknown>;
 }
 export interface Settings {
-  chunk_size: number;
-  chunk_overlap: number;
+  chunking: ChunkingParams;
   retrieval: RetrievalParams;
   history_turns: number;
   default_provider_id: string | null;
@@ -124,7 +138,7 @@ export const api = {
   listDocuments: () => request<DocumentMeta[]>("/api/documents"),
   getDocument: (id: string) => request<DocumentFull>(`/api/documents/${id}`),
   createDocument: (name: string, content: string) => request<DocumentFull>("/api/documents", json("POST", { name, content })),
-  updateDocument: (id: string, data: { name?: string; content?: string }) =>
+  updateDocument: (id: string, data: { name?: string; content?: string; chunking?: ChunkingParams; use_default_chunking?: boolean }) =>
     request<DocumentFull>(`/api/documents/${id}`, json("PUT", data)),
   deleteDocument: (id: string) => request<void>(`/api/documents/${id}`, json("DELETE")),
   getChunks: (id: string) => request<Chunk[]>(`/api/documents/${id}/chunks`),
@@ -136,6 +150,8 @@ export const api = {
       body: form,
     });
   },
+  previewChunks: (chunking: ChunkingParams, src: { content?: string; doc_id?: string }) =>
+    request<ChunkPreview>("/api/documents/preview-chunks", json("POST", { chunking, ...src })),
   reindex: () => request<{ documents: number; chunks: number }>("/api/documents/reindex", json("POST")),
 
   search: (query: string, retrieval: Partial<RetrievalParams>, doc_ids?: string[]) =>

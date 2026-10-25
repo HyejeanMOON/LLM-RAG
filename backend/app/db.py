@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS documents (
     content     TEXT NOT NULL,
     file_type   TEXT NOT NULL,
     chunk_count INTEGER NOT NULL DEFAULT 0,
+    chunking    TEXT,                   -- 这篇文档单独的切分策略(JSON)，NULL 表示用全局默认
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 );
@@ -61,6 +62,10 @@ def tx():
 def init():
     with tx() as conn:
         conn.executescript(SCHEMA)
+        # 旧版本数据库没有 chunking 列，补上
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(documents)")}
+        if "chunking" not in cols:
+            conn.execute("ALTER TABLE documents ADD COLUMN chunking TEXT")
 
 
 def get_setting(key: str, default=None):

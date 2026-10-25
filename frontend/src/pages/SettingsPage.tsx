@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Provider, type ProviderInput, type Settings } from "../api";
+import ChunkingEditor from "../components/ChunkingEditor";
 import StrategyEditor from "../components/StrategyEditor";
 
 // 常见厂商的预设，选中后自动填好接口地址和模型名（模型名可以再改）
@@ -207,14 +208,9 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
       <h2>检索与切片</h2>
       {settings && (
         <div className="form">
-          <label>
-            切片长度（字符）
-            <input type="number" value={settings.chunk_size} onChange={(e) => setSettings({ ...settings, chunk_size: Number(e.target.value) })} />
-          </label>
-          <label>
-            切片重叠（字符）
-            <input type="number" value={settings.chunk_overlap} onChange={(e) => setSettings({ ...settings, chunk_overlap: Number(e.target.value) })} />
-          </label>
+          <h3>默认切分策略</h3>
+          <p className="muted small">新上传的文档使用这里的策略。单篇文档可以在“文档管理 → 切片”里单独设置并预览效果。</p>
+          <ChunkingEditor value={settings.chunking} onChange={(chunking) => setSettings({ ...settings, chunking })} />
           <h3>问答默认检索策略</h3>
           <p className="muted small">也可以在“检索调试”页对比几种策略后，点“设为问答默认”。</p>
           <StrategyEditor value={settings.retrieval} onChange={(retrieval) => setSettings({ ...settings, retrieval })} />
@@ -228,7 +224,7 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
                 report(async () => {
                   const { default_provider_id: _ignored, ...rest } = settings;
                   setSettings(await api.updateSettings(rest));
-                  return "已保存。修改切片长度/重叠后，点“重建索引”才会对已有文档生效。";
+                  return "已保存。修改默认切分策略后，点“重建索引”才会对已有文档生效（单独设置过策略的文档保持不变）。";
                 })
               }
             >

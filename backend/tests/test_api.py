@@ -3,13 +3,13 @@ import json
 
 import docx
 
-from app.chunker import chunk_text
+from app.chunker import ChunkingParams, chunk_text
 from app.services.rag import _clean_history
 
 
 def test_chunker_respects_size_and_titles():
     text = "# 标题A\n" + "这是一句话。" * 100 + "\n# 标题B\n短内容。"
-    chunks = chunk_text(text, chunk_size=100, overlap=20)
+    chunks = chunk_text(text, ChunkingParams(chunk_size=100, chunk_overlap=20))
     assert all(len(c) <= 100 + len("【标题A】") for c in chunks)
     assert chunks[0].startswith("【标题A】")
     assert chunks[-1] == "【标题B】短内容。"
@@ -62,9 +62,10 @@ def test_upload_txt_docx_and_reject_unknown(client):
 
 
 def test_settings_and_reindex(client):
-    assert client.put("/api/settings", json={"chunk_size": 100, "chunk_overlap": 100}).status_code == 400
+    assert client.put("/api/settings", json={"chunking": {"chunk_size": 100, "chunk_overlap": 100}}).status_code in (400, 422)
+    assert client.put("/api/settings", json={"chunking": {"chunk_overlap": 400}}).status_code == 400
     before = client.get("/api/documents").json()[0]["chunk_count"]
-    client.put("/api/settings", json={"chunk_size": 100, "chunk_overlap": 20})
+    client.put("/api/settings", json={"chunking": {"chunk_size": 100, "chunk_overlap": 20}})
     r = client.post("/api/documents/reindex").json()
     after = client.get("/api/documents").json()[0]["chunk_count"]
     assert after > before and r["chunks"] == after

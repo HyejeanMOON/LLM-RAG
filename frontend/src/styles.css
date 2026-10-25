@@ -126,3 +126,12 @@ button.link.danger-text { color: var(--danger); }
 .tag.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 .tag.plain { background: none; }
 .form h3 { margin-top: 8px; }
+
+/* 切分策略 */
+.chunk-view { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
+.chunking-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.chunk-columns { display: grid; grid-template-columns: 1fr; gap: 12px; flex: 1; min-height: 0; }
+.chunk-columns.two { grid-template-columns: 1fr 1fr; }
+.chunk-columns .chunk-list { overflow-y: auto; }
+.col-label { font-weight: 600; font-size: 13px; margin-bottom: 8px; position: sticky; top: 0; background: var(--bg); padding: 4px 0; }
+.chunk.preview { border-color: var(--primary); border-style: dashed; }

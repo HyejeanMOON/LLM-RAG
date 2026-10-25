@@ -27,10 +27,10 @@ def get_settings():
 def update_settings(body: SettingsUpdate):
     values = body.model_dump(exclude_none=True)
     current = settings.get_all()
-    if "retrieval" in values:
-        values["retrieval"] = {**current["retrieval"], **values["retrieval"]}
-    size = values.get("chunk_size", current["chunk_size"])
-    overlap = values.get("chunk_overlap", current["chunk_overlap"])
-    if overlap >= size:
+    for key in ("retrieval", "chunking"):
+        if key in values:
+            values[key] = {**current[key], **values[key]}
+    c = values.get("chunking", current["chunking"])
+    if c["chunk_overlap"] >= c["chunk_size"]:
         raise HTTPException(400, "重叠长度必须小于切片长度")
     return settings.update(values)
