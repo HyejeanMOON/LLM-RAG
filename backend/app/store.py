@@ -1,7 +1,13 @@
-"""Chroma 向量库：保存每个切片的向量，并按余弦相似度检索。"""
+"""Chroma 向量库：保存每个切片的文本、元数据和向量。
+
+具体怎么检索（余弦 / 点积 / 欧氏、BM25、混合、MMR…）在 retrieval.py 里实现，
+这里提供 load_corpus() 把切片和向量一次性取出来并缓存，文档变化时自动失效。
+"""
+import threading
 from functools import lru_cache
 
 import chromadb
+import numpy as np
 
 from . import config
 from .embeddings import get_embedder
@@ -15,6 +21,8 @@ class VectorStore:
         safe = "".join(c if c.isalnum() else "_" for c in embedder.name)
         self.collection_name = f"chunks_{safe}"[:60]
         self.collection = self._get_collection()
+        self._corpus = None
+        self._corpus_lock = threading.Lock()
 
     def _get_collection(self):
         return self.client.get_or_create_collection(
@@ -25,6 +33,7 @@ class VectorStore:
     def reset(self):
         self.client.delete_collection(self.collection_name)
         self.collection = self._get_collection()
+        self._corpus = None
 
     def replace_document(self, doc_id: str, doc_name: str, chunks: list[str]):
         """删除文档的旧切片，写入新切片（新增和修改文档都走这里）。"""
@@ -37,9 +46,11 @@ class VectorStore:
             embeddings=self.embedder.embed_documents(chunks),
             metadatas=[{"doc_id": doc_id, "doc_name": doc_name, "index": i} for i in range(len(chunks))],
         )
+        self._corpus = None
 
     def delete_document(self, doc_id: str):
         self.collection.delete(where={"doc_id": doc_id})
+        self._corpus = None
 
     def get_chunks(self, doc_id: str) -> list[dict]:
         res = self.collection.get(where={"doc_id": doc_id}, include=["documents", "metadatas"])
@@ -49,28 +60,20 @@ class VectorStore:
         ]
         return sorted(items, key=lambda x: x["index"])
 
-    def search(self, query: str, top_k: int = 4, doc_ids: list[str] | None = None) -> list[dict]:
-        if self.collection.count() == 0:
-            return []
-        where = None
-        if doc_ids:
-            where = {"doc_id": doc_ids[0]} if len(doc_ids) == 1 else {"doc_id": {"$in": doc_ids}}
-        res = self.collection.query(
-            query_embeddings=[self.embedder.embed_query(query)],
-            n_results=top_k,
-            where=where,
-            include=["documents", "metadatas", "distances"],
-        )
-        return [
-            {
-                "doc_id": meta["doc_id"],
-                "doc_name": meta["doc_name"],
-                "index": meta["index"],
-                "text": doc,
-                "score": round(1 - dist, 4),  # 余弦相似度，越大越相关
-            }
-            for doc, meta, dist in zip(res["documents"][0], res["metadatas"][0], res["distances"][0])
-        ]
+    def load_corpus(self) -> dict:
+        """返回全部切片：ids、texts、metas、embeddings(np.ndarray)。有缓存。"""
+        with self._corpus_lock:
+            if self._corpus is None:
+                res = self.collection.get(include=["documents", "metadatas", "embeddings"])
+                emb = res["embeddings"]
+                dim = len(self.embedder.embed_query("dim"))
+                self._corpus = {
+                    "ids": res["ids"],
+                    "texts": res["documents"],
+                    "metas": res["metadatas"],
+                    "embeddings": np.asarray(emb, dtype=np.float32) if len(res["ids"]) else np.zeros((0, dim), np.float32),
+                }
+            return self._corpus
 
     def count(self) -> int:
         return self.collection.count()

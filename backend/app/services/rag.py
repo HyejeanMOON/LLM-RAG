@@ -2,7 +2,7 @@
 from typing import Iterator
 
 from ..llm import create_llm
-from ..store import get_store
+from ..retrieval import retrieve as run_retrieval
 from . import providers, settings
 
 SYSTEM_PROMPT = """你是一个基于检索资料回答问题的助手。
@@ -12,12 +12,9 @@ SYSTEM_PROMPT = """你是一个基于检索资料回答问题的助手。
 - 默认使用与用户提问相同的语言回答。"""
 
 
-def retrieve(question: str, top_k: int | None = None, doc_ids: list[str] | None = None,
-             min_score: float | None = None) -> list[dict]:
-    top_k = top_k or settings.get("top_k")
-    min_score = settings.get("min_score") if min_score is None else min_score
-    hits = get_store().search(question, top_k, doc_ids)
-    return [h for h in hits if h["score"] >= min_score]
+def retrieve(question: str, overrides: dict | None = None, doc_ids: list[str] | None = None) -> list[dict]:
+    """按设置里的默认检索策略检索，overrides 可以临时覆盖其中的参数。"""
+    return run_retrieval(question, settings.retrieval_params(overrides), doc_ids)
 
 
 def build_user_message(question: str, hits: list[dict]) -> str:

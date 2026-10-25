@@ -62,7 +62,7 @@ export default function App() {
           <DocumentsPage version={version} onChanged={bump} />
         </div>
         <div hidden={tab !== "search"}>
-          <SearchPage version={version} />
+          <SearchPage version={version} onChanged={bump} />
         </div>
         <div hidden={tab !== "settings"}>
           <SettingsPage version={version} onChanged={bump} />

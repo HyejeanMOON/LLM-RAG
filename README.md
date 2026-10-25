@@ -24,8 +24,9 @@
 | 向量库 | [Chroma](https://www.trychroma.com/)，本地持久化，余弦相似度；每篇文档的切片带 `doc_id`，支持只在指定文档里检索 |
 | LLM | **Claude**（Anthropic 官方 SDK）和 **OpenAI 兼容接口**（OpenAI、DeepSeek、通义千问、Kimi、智谱、本地 Ollama…），网页上添加多个、设默认、测试连接，问答时下拉切换 |
 | 问答 | SSE 流式输出；先返回检索到的片段（含相似度），回答里用 [1][2] 标注来源；支持多轮对话、可随时停止 |
-| 检索调试 | 只检索不调用 LLM，看切片和相似度，方便调参数 |
-| 参数 | 切片长度、重叠、Top K、最低相似度阈值、带几轮历史；改完切片参数可一键重建索引 |
+| 检索算法 | 向量检索（余弦 / 点积 / 欧氏距离）、BM25 关键词、混合检索（RRF 排名融合或分数加权）、交叉编码器重排序、MMR 多样性、Top K、余弦相似度阈值，可任意组合 |
+| 检索调试 | 同一个问题用最多 4 种策略并排对比：每个片段显示余弦、点积、欧氏距离、BM25、混合、重排序、MMR 各项分数，以及它在其他策略里的排名；满意的策略一键设为问答默认 |
+| 参数 | 切片长度、重叠、问答默认检索策略、带几轮历史；改完切片参数可一键重建索引 |
 
 ## 快速开始
 
@@ -83,6 +84,22 @@ npm run dev                                           # 打开 http://localhost:
 
 “高级参数”是 JSON：Claude 支持 `effort`（`low`/`medium`/`high`）和 `max_tokens`；OpenAI 兼容接口支持 `temperature`。
 
+## 检索算法说明
+
+代码在 `backend/app/retrieval.py`，流程是：打分 → 取候选 → （可选）重排序 → （可选）MMR → 阈值过滤 → 取 Top K。
+
+| 选项 | 作用 |
+|---|---|
+| 向量检索 + 余弦 / 点积 / 欧氏距离 | 按语义相似度排序。bge 这类模型输出归一化向量，三种度量的排序基本一致，分数尺度不同 |
+| BM25 | 关键词匹配（中文按单字 + 双字切词，不依赖词典），适合专有名词、编号、数字 |
+| 混合检索 · RRF | 向量和 BM25 各自排名，按 `1/(k+排名)` 相加，不受分数尺度影响 |
+| 混合检索 · 加权 | 两边分数归一化到 0~1，`α·向量 + (1-α)·BM25` |
+| 重排序 | 用交叉编码器 `BAAI/bge-reranker-base` 给前 fetch_k 个候选重新打分（首次使用会下载约 1GB 模型） |
+| MMR | 在前 fetch_k 个候选里挑“相关、且和已选片段不重复”的，λ 越小越重视多样性 |
+| 最低余弦相似度 | 无论用哪种算法，余弦相似度低于阈值的片段都丢弃 |
+
+切片数量在几万以内时，检索直接用 numpy 对全部切片精确计算；数据量更大时，可以改成先用 Chroma 的近似检索取候选。
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
@@ -127,8 +144,9 @@ frontend/
 | GET/PUT/DELETE | `/api/documents/{id}` | 查看 / 修改（自动重新切片）/ 删除 |
 | GET | `/api/documents/{id}/chunks` | 查看切片 |
 | POST | `/api/documents/reindex` | 用当前参数重建全部索引 |
-| POST | `/api/search` | 只检索：query, top_k, doc_ids |
-| POST | `/api/chat` | 问答（SSE）：query, provider_id, doc_ids, history；事件依次为 sources、delta…、done 或 error |
+| POST | `/api/search` | 只检索：query, doc_ids, retrieval（检索参数，不填的用默认策略） |
+| POST | `/api/search/compare` | 多策略对比：query, doc_ids, strategies（最多 6 个） |
+| POST | `/api/chat` | 问答（SSE）：query, provider_id, doc_ids, history, retrieval；事件依次为 sources、delta…、done 或 error |
 | GET/POST/PUT/DELETE | `/api/providers[/{id}]` | 模型配置；`POST /{id}/default` 设默认，`POST /{id}/test` 测试连接 |
 | GET/PUT | `/api/settings` | 检索与切片参数 |
 
@@ -142,7 +160,7 @@ cd backend && pytest
 
 ## 后续可以加的
 
-- 混合检索（BM25 + 向量）、reranker 重排、MMR 去重
+- 多查询改写 / HyDE、small-to-big（命中小切片后返回所在大段落）
 - 切片带日期等元数据，按时间过滤
 - 多用户登录和每人独立的知识库
 - 扫描版 PDF 的 OCR

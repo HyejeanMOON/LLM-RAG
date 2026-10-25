@@ -16,12 +16,46 @@ export interface Chunk {
   index: number;
   text: string;
 }
+export type Method = "vector" | "bm25" | "hybrid";
+export type Metric = "cosine" | "dot" | "l2";
+export interface RetrievalParams {
+  method: Method;
+  metric: Metric;
+  top_k: number;
+  min_score: number;
+  fetch_k: number;
+  fusion: "rrf" | "weighted";
+  hybrid_alpha: number;
+  rrf_k: number;
+  use_mmr: boolean;
+  mmr_lambda: number;
+  use_rerank: boolean;
+}
+export interface HitScores {
+  cosine: number;
+  dot: number;
+  l2: number;
+  bm25: number;
+  vector_rank: number;
+  bm25_rank: number;
+  hybrid?: number;
+  mmr?: number;
+  rerank?: number;
+}
 export interface Hit {
   doc_id: string;
   doc_name: string;
   index: number;
   text: string;
-  score: number;
+  score: number; // 当前策略最终用来排序的分数
+  scores: HitScores;
+}
+export interface CompareResult {
+  label: string;
+  params: RetrievalParams;
+  hits: Hit[];
+  error: string | null;
+  elapsed_ms: number;
 }
 export type ProviderType = "anthropic" | "openai";
 export interface Provider {
@@ -46,8 +80,7 @@ export interface ProviderInput {
 export interface Settings {
   chunk_size: number;
   chunk_overlap: number;
-  top_k: number;
-  min_score: number;
+  retrieval: RetrievalParams;
   history_turns: number;
   default_provider_id: string | null;
 }
@@ -105,8 +138,10 @@ export const api = {
   },
   reindex: () => request<{ documents: number; chunks: number }>("/api/documents/reindex", json("POST")),
 
-  search: (query: string, top_k?: number, doc_ids?: string[]) =>
-    request<Hit[]>("/api/search", json("POST", { query, top_k, doc_ids, min_score: -1 })),
+  search: (query: string, retrieval: Partial<RetrievalParams>, doc_ids?: string[]) =>
+    request<Hit[]>("/api/search", json("POST", { query, retrieval, doc_ids })),
+  compare: (query: string, strategies: (Partial<RetrievalParams> & { label: string })[], doc_ids?: string[]) =>
+    request<CompareResult[]>("/api/search/compare", json("POST", { query, strategies, doc_ids })),
 
   listProviders: () => request<Provider[]>("/api/providers"),
   createProvider: (p: ProviderInput) => request<Provider>("/api/providers", json("POST", p)),
@@ -116,7 +151,7 @@ export const api = {
   testProvider: (id: string) => request<{ ok: boolean; message: string }>(`/api/providers/${id}/test`, json("POST")),
 
   getSettings: () => request<Settings>("/api/settings"),
-  updateSettings: (s: Partial<Settings>) => request<Settings>("/api/settings", json("PUT", s)),
+  updateSettings: (s: Partial<Omit<Settings, "retrieval">> & { retrieval?: Partial<RetrievalParams> }) => request<Settings>("/api/settings", json("PUT", s)),
 };
 
 export interface ChatHandlers {
@@ -128,7 +163,7 @@ export interface ChatHandlers {
 
 /** 流式问答：解析后端的 SSE（sources → delta… → done/error）。 */
 export async function streamChat(
-  body: { query: string; provider_id?: string; top_k?: number; doc_ids?: string[]; history: ChatTurn[] },
+  body: { query: string; provider_id?: string; doc_ids?: string[]; history: ChatTurn[]; retrieval?: Partial<RetrievalParams> },
   handlers: ChatHandlers,
   signal?: AbortSignal,
 ) {

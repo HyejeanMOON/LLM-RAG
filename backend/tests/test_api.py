@@ -18,7 +18,7 @@ def test_chunker_respects_size_and_titles():
 def test_sample_doc_seeded_and_search(client):
     docs = client.get("/api/documents").json()
     assert len(docs) == 1 and docs[0]["chunk_count"] > 0
-    hits = client.post("/api/search", json={"query": "上海出差住宿每晚报销标准", "top_k": 3}).json()
+    hits = client.post("/api/search", json={"query": "上海出差住宿每晚报销标准", "retrieval": {"top_k": 3}}).json()
     assert len(hits) == 3
     assert hits[0]["doc_name"] == "xinghe_handbook.md"
     assert hits[0]["score"] >= hits[-1]["score"]
@@ -38,7 +38,7 @@ def test_document_crud_reindexes(client):
 
     assert client.delete(f"/api/documents/{d['id']}").status_code == 204
     assert client.get(f"/api/documents/{d['id']}").status_code == 404
-    hits = client.post("/api/search", json={"query": "狗叫什么", "top_k": 10}).json()
+    hits = client.post("/api/search", json={"query": "狗叫什么", "retrieval": {"top_k": 10}}).json()
     assert all(h["doc_id"] != d["id"] for h in hits)
 
 

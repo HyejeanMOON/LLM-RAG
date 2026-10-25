@@ -13,11 +13,38 @@ class DocumentUpdate(BaseModel):
     content: str | None = Field(default=None, min_length=1)
 
 
+class RetrievalOptions(BaseModel):
+    """检索策略，全部可选；没给的字段用设置里的默认值。"""
+    method: Literal["vector", "bm25", "hybrid"] | None = None
+    metric: Literal["cosine", "dot", "l2"] | None = None
+    top_k: int | None = Field(default=None, ge=1, le=50)
+    min_score: float | None = Field(default=None, ge=-1, le=1)
+    fetch_k: int | None = Field(default=None, ge=1, le=200)
+    fusion: Literal["rrf", "weighted"] | None = None
+    hybrid_alpha: float | None = Field(default=None, ge=0, le=1)
+    rrf_k: int | None = Field(default=None, ge=1, le=1000)
+    use_mmr: bool | None = None
+    mmr_lambda: float | None = Field(default=None, ge=0, le=1)
+    use_rerank: bool | None = None
+
+    def overrides(self) -> dict:
+        return self.model_dump(exclude_none=True)
+
+
 class SearchRequest(BaseModel):
     query: str = Field(min_length=1)
-    top_k: int | None = Field(default=None, ge=1, le=50)
     doc_ids: list[str] | None = None
-    min_score: float | None = Field(default=None, ge=-1, le=1)
+    retrieval: RetrievalOptions = RetrievalOptions()
+
+
+class Strategy(RetrievalOptions):
+    label: str = ""
+
+
+class CompareRequest(BaseModel):
+    query: str = Field(min_length=1)
+    doc_ids: list[str] | None = None
+    strategies: list[Strategy] = Field(min_length=1, max_length=6)
 
 
 class ChatMessage(BaseModel):
@@ -51,6 +78,5 @@ class ProviderUpdate(BaseModel):
 class SettingsUpdate(BaseModel):
     chunk_size: int | None = Field(default=None, ge=50, le=4000)
     chunk_overlap: int | None = Field(default=None, ge=0, le=1000)
-    top_k: int | None = Field(default=None, ge=1, le=50)
-    min_score: float | None = Field(default=None, ge=-1, le=1)
+    retrieval: RetrievalOptions | None = None
     history_turns: int | None = Field(default=None, ge=0, le=20)

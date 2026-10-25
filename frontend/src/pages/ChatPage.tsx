@@ -125,7 +125,9 @@ export default function ChatPage({ version }: { version: number }) {
                 {m.sources.map((s, j) => (
                   <div key={j} className="source">
                     <div className="source-head">
-                      [{j + 1}] {s.doc_name} #{s.index} <span className="score">相似度 {s.score.toFixed(3)}</span>
+                      [{j + 1}] {s.doc_name} #{s.index} <span className="score">
+                        得分 {s.score.toFixed(3)} · 余弦 {s.scores.cosine.toFixed(3)} · BM25 {s.scores.bm25.toFixed(2)}
+                      </span>
                     </div>
                     <div className="source-text">{s.text}</div>
                   </div>

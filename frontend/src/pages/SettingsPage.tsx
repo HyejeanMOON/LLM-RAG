@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Provider, type ProviderInput, type Settings } from "../api";
+import StrategyEditor from "../components/StrategyEditor";
 
 // 常见厂商的预设，选中后自动填好接口地址和模型名（模型名可以再改）
 const PRESETS: { label: string; value: ProviderInput }[] = [
@@ -214,14 +215,9 @@ export default function SettingsPage({ version, onChanged }: { version: number; 
             切片重叠（字符）
             <input type="number" value={settings.chunk_overlap} onChange={(e) => setSettings({ ...settings, chunk_overlap: Number(e.target.value) })} />
           </label>
-          <label>
-            每次检索片段数 Top K
-            <input type="number" value={settings.top_k} onChange={(e) => setSettings({ ...settings, top_k: Number(e.target.value) })} />
-          </label>
-          <label>
-            最低相似度（0~1，低于它的片段不发给模型）
-            <input type="number" step="0.05" value={settings.min_score} onChange={(e) => setSettings({ ...settings, min_score: Number(e.target.value) })} />
-          </label>
+          <h3>问答默认检索策略</h3>
+          <p className="muted small">也可以在“检索调试”页对比几种策略后，点“设为问答默认”。</p>
+          <StrategyEditor value={settings.retrieval} onChange={(retrieval) => setSettings({ ...settings, retrieval })} />
           <label>
             多轮对话带上最近几轮
             <input type="number" value={settings.history_turns} onChange={(e) => setSettings({ ...settings, history_turns: Number(e.target.value) })} />

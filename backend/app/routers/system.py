@@ -27,6 +27,8 @@ def get_settings():
 def update_settings(body: SettingsUpdate):
     values = body.model_dump(exclude_none=True)
     current = settings.get_all()
+    if "retrieval" in values:
+        values["retrieval"] = {**current["retrieval"], **values["retrieval"]}
     size = values.get("chunk_size", current["chunk_size"])
     overlap = values.get("chunk_overlap", current["chunk_overlap"])
     if overlap >= size:
