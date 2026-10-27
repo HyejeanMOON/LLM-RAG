@@ -36,6 +36,7 @@
 | 检索算法 | 向量检索（余弦 / 点积 / 欧氏距离）、BM25 关键词、混合检索（RRF 排名融合或分数加权）、交叉编码器重排序、MMR 多样性、Top K、余弦相似度阈值，可任意组合 |
 | 检索调试 | 同一个问题用最多 4 种策略并排对比：每个片段显示余弦、点积、欧氏距离、BM25、混合、重排序、MMR 各项分数，以及它在其他策略里的排名；满意的策略一键设为问答默认 |
 | 中英文界面 | 侧边栏底部一键切换中文 / English，所有页面、原理说明、后端错误信息、默认提示词都跟着变；语言记在浏览器里 |
+| 评测（AI 评价） | 测试集（导入示例 / 手写 / LLM 自动出题 / JSON 导入导出）；检索指标 Hit Rate、Recall、Precision、MRR、MAP、NDCG；文本指标 精确匹配、Token F1、BLEU、ROUGE-1/2/L、语义相似度；LLM 裁判 忠实度、答案相关性、上下文精确率 / 召回率 / 相关性、答案正确性、G-Eval、拒答正确率、误拒率；多次评测并排对比、逐题看裁判理由、成对比较（交换顺序消除位置偏差）；每个指标都有公式和原理说明 |
 | RAG 流程页 | 按“切分 → 向量化 → 索引 → 问题处理 → 检索 → 上下文 → 生成”的顺序列出全部参数，每个环节都有原理说明；前三步改了会提示重建索引 |
 
 ## 界面截图
@@ -193,6 +194,34 @@ Ollama 装好后会在后台运行，默认地址 `http://localhost:11434`。
 - 去掉系统提示词里“只依据片段回答”，问一个文档里没有的问题，看模型会不会编；
 - 在检索调试页把“精确计算”和“HNSW 候选 5”放两列，看召回差异。
 
+## 评测（AI 评价）
+
+“📊 评测”页用一套固定的题目给 RAG 打分。改一个参数跑一次，并排比较就知道改动是好是坏。页面里的“📖 指标说明”有每个指标的公式和原理，这里只列个大概。
+
+**1. 准备测试集**（“① 题目”）
+
+- “导入示例测试集”：12 道题，对应示例员工手册（中文界面导入中文版，英文界面导入英文版），其中 2 道是文档里没有答案的，用来测拒答；
+- 手动添加：问题、参考答案、证据（从文档里原样复制能回答问题的句子，每行一段）、是否有答案；
+- “用 LLM 从文档自动出题”：随机抽切片让 LLM 出题、写参考答案、摘证据，还能生成无答案的题。合成题目要人工检查；
+- 导入 / 导出 JSON：`{"name": "...", "items": [{"question", "reference_answer", "evidence": [...], "answerable"}]}`。
+
+证据用原文片段而不是切片编号标注，所以换切分策略、重建索引后标注仍然有效：检索到的切片和证据的字符二元组重合度 ≥ 阈值（默认 0.6）就算命中。
+
+**2. 运行评测**（“② 运行评测”）：选指标、回答模型、裁判模型，可以只对这次评测临时覆盖检索 / 问题处理 / 上下文参数。评测在后台运行，可以看进度、随时取消。
+
+| 类别 | 指标 | 需要 |
+|---|---|---|
+| 检索 | Hit Rate@K、Recall@K、Precision@K、MRR、MAP@K、NDCG@K | 证据；不调用 LLM，免费 |
+| 文本相似度 | 精确匹配、Token F1、BLEU-4、ROUGE-1 / 2 / L、语义相似度（当前向量模型的余弦） | 参考答案 + 生成回答 |
+| LLM 裁判 | 忠实度（拆陈述逐条核对资料）、答案相关性（由回答反推问题再算相似度）、上下文精确率 / 召回率 / 相关性、答案正确性（TP/FP/FN 的 F1 + 语义相似度）、G-Eval（评分步骤 + 1~5 分）、拒答正确率、误拒率 | 裁判模型；部分需要参考答案 |
+| 系统 | 总耗时、检索耗时、上下文字数、回答字数 | 自动记录 |
+
+只选检索指标时完全不调用 LLM。裁判指标参考 [RAGAS](https://docs.ragas.io/) 和 G-Eval 的做法，代码在 `backend/app/evaluation/judge.py`，提示词可以直接读。
+
+**3. 看结果**（“③ 结果对比”）：每次评测一行，每个指标一列，同列最好的值加粗；点评测名看逐题的回答、检索到的切片（标出覆盖了哪段证据）和裁判的逐条判断；勾选两次评测可以做成对比较，裁判对每道题交换 A/B 顺序各判一次，两次不一致算平局。
+
+建议的实验：只用检索指标（免费）对比向量 / BM25 / 混合和不同 Top K；把向量化换成字符哈希再评；删掉提示词里“只依据片段回答”看忠实度和拒答正确率；对比 BLEU / ROUGE 和裁判分数的差别；本地 Gemma 4 和 Claude 做成对比较。
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
@@ -222,14 +251,16 @@ backend/
     embeddings.py        fastembed / hash 向量化
     store.py             Chroma 向量库：写入、删除、按文档过滤检索
     llm/                 LLM 统一接口：anthropic_provider.py、openai_provider.py
-    services/            业务逻辑：documents / providers / local_models（本地模型检测） / settings / rag
+    evaluation/          评测指标：metrics.py（检索 / 文本）、judge.py（LLM 裁判）、testset.py（自动出题）
+    services/            业务逻辑：documents / providers / local_models（本地模型检测） / settings / rag / evaluation
     routers/             HTTP 接口
   tests/                 pytest（用 hash 向量和假 LLM，不需要网络和 key）
-  sample_docs/           示例文档
+  sample_docs/           示例文档和示例测试集（中英文）
 frontend/
   src/api.ts             接口封装 + SSE 解析
   src/i18n.ts            中英文切换：t("中文", "English")
-  src/pages/             ChatPage / DocumentsPage / SearchPage / SettingsPage
+  src/pages/             ChatPage / DocumentsPage / SearchPage / PipelinePage / SettingsPage / eval/（评测页）
+  src/evalMetrics.ts     评测指标的名称、公式和原理说明
 ```
 
 ## 主要接口
@@ -251,6 +282,15 @@ frontend/
 | GET | `/api/embedding/models` | 常用 embedding 模型列表 |
 | POST | `/api/embedding/test` | 向量化实验：texts，可用 query 参数临时指定 backend / model / provider_id |
 | GET | `/api/documents/tags` | 所有标签 |
+| GET | `/api/eval/metrics` | 可用的评测指标 |
+| GET/POST | `/api/eval/sets` | 测试集列表 / 新建或导入（name, items） |
+| POST | `/api/eval/sets/sample` | 导入示例测试集（按 Accept-Language 选中英文） |
+| GET/PUT/DELETE | `/api/eval/sets/{id}` | 查看 / 修改（整体替换 items）/ 删除；`GET /{id}/export` 导出 |
+| POST | `/api/eval/sets/{id}/generate` | LLM 自动出题：provider_id, n, n_unanswerable |
+| GET | `/api/eval/sets/{id}/runs` | 这个测试集的评测记录（带各指标平均分） |
+| POST | `/api/eval/runs` | 开始评测（后台运行）：set_id, name, metrics, provider_id, judge_provider_id, overrides |
+| GET/DELETE | `/api/eval/runs/{id}` | 进度和逐题结果 / 删除；`POST /{id}/cancel` 取消 |
+| POST | `/api/eval/pairwise` | 成对比较：run_a, run_b, judge_provider_id |
 
 启动后访问 http://localhost:8000/docs 可以看到自动生成的接口文档。
 

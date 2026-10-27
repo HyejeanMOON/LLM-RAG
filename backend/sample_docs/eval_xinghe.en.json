@@ -1,0 +1,17 @@
+{
+  "name": "Sample: Xinghe employee handbook",
+  "items": [
+    {"question": "How much can I claim per night for a hotel on a business trip to Shanghai?", "reference_answer": "Shanghai is a tier-1 city, so lodging is capped at 650 yuan per night.", "evidence": ["up to 650 yuan per night in tier-1 cities (Beijing, Shanghai, Guangzhou, Shenzhen)"], "answerable": true},
+    {"question": "Until when can I use annual leave I didn't take this year?", "reference_answer": "It can be carried over until March 31 of the following year, after which it expires.", "evidence": ["Unused annual leave can be carried over until March 31 of the following year, after which it expires"], "answerable": true},
+    {"question": "How many days a month can employees on probation work remotely?", "reference_answer": "Up to 2 days a month.", "evidence": ["Employees on probation may work remotely up to 2 days a month"], "answerable": true},
+    {"question": "Who is the company's CTO?", "reference_answer": "The CTO is Zhou Ruoxi.", "evidence": ["the CTO is Zhou Ruoxi"], "answerable": true},
+    {"question": "How big is the yearly learning fund?", "reference_answer": "Each employee has 3,000 yuan per year for books, online courses or tech conferences.", "evidence": ["Each employee has a learning fund of 3,000 yuan per year"], "answerable": true},
+    {"question": "Who has to approve a single expense claim over 5,000 yuan?", "reference_answer": "Both the department head and the finance director.", "evidence": ["A single claim over 5,000 yuan needs approval from both the department head and the finance director"], "answerable": true},
+    {"question": "Roughly how many months' salary is the year-end bonus for an employee rated A?", "reference_answer": "The baseline is 2 months' salary and the A factor is 1.3, so about 2.6 months' salary.", "evidence": ["The baseline is 2 months' salary", "S=1.8, A=1.3, B=1.0, C=0"], "answerable": true},
+    {"question": "What should I do if I suspect a data leak?", "reference_answer": "Report it to the security team within 1 hour via security@xinghe.example or extension 8110.", "evidence": ["Suspected data leaks must be reported to the security team within 1 hour via security@xinghe.example or internal extension 8110"], "answerable": true},
+    {"question": "When and where does the morning shuttle leave?", "reference_answer": "At 8:30 and 9:00 from Exit B of Binhe Road subway station.", "evidence": ["shuttles leave from Exit B of Binhe Road subway station at 8:30 and 9:00"], "answerable": true},
+    {"question": "Do new employees get a mentor, and how often do they meet?", "reference_answer": "Yes, a \"navigator\" mentor, with at least one one-on-one per week during the first three months.", "evidence": ["New employees are assigned a \"navigator\" (mentor) and have at least one one-on-one per week during their first three months"], "answerable": true},
+    {"question": "What is the company's stock ticker?", "reference_answer": "", "evidence": [], "answerable": false},
+    {"question": "Does the company provide free lunch?", "reference_answer": "", "evidence": [], "answerable": false}
+  ]
+}

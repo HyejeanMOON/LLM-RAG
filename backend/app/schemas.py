@@ -171,3 +171,47 @@ class SettingsUpdate(BaseModel):
 
 class EmbeddingTest(BaseModel):
     texts: list[str] = Field(min_length=2, max_length=10)
+
+
+# ---------- 评测 ----------
+
+class EvalItem(BaseModel):
+    question: str = Field(min_length=1)
+    reference_answer: str = ""
+    evidence: list[str] = []
+    answerable: bool = True
+    source: str = ""
+
+
+class EvalSetCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    items: list[EvalItem] = []
+
+
+class EvalSetUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    items: list[EvalItem] | None = None
+
+
+class EvalGenerate(BaseModel):
+    provider_id: str | None = None
+    n: int = Field(default=5, ge=1, le=50)
+    n_unanswerable: int = Field(default=0, ge=0, le=20)
+    doc_ids: list[str] | None = None
+
+
+class EvalRunCreate(BaseModel):
+    set_id: str
+    name: str = Field(min_length=1, max_length=200)
+    metrics: list[str] = []
+    provider_id: str | None = None        # 生成回答用的模型
+    judge_provider_id: str | None = None  # 当裁判的模型，不填用同一个
+    overrides: dict[str, dict] = {}       # 临时覆盖 query / retrieval / context / generation 参数
+    match_threshold: float = Field(default=0.6, ge=0.1, le=1)
+    concurrency: int = Field(default=4, ge=1, le=8)
+
+
+class EvalPairwise(BaseModel):
+    run_a: str
+    run_b: str
+    judge_provider_id: str | None = None

@@ -461,7 +461,7 @@ function IndexEditor({ value, onChange }: { value: IndexSettings; onChange: (v: 
   );
 }
 
-function QueryEditor({ value, onChange }: { value: QuerySettings; onChange: (v: QuerySettings) => void }) {
+export function QueryEditor({ value, onChange }: { value: QuerySettings; onChange: (v: QuerySettings) => void }) {
   return (
     <div className="strategy-editor">
       <Num
@@ -503,7 +503,7 @@ function QueryEditor({ value, onChange }: { value: QuerySettings; onChange: (v: 
   );
 }
 
-function ContextEditor({ value, onChange }: { value: ContextParams; onChange: (v: ContextParams) => void }) {
+export function ContextEditor({ value, onChange }: { value: ContextParams; onChange: (v: ContextParams) => void }) {
   return (
     <div className="strategy-editor">
       <Num

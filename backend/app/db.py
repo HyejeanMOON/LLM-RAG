@@ -38,6 +38,42 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+-- 评测：测试集、题目、评测任务、每题结果
+CREATE TABLE IF NOT EXISTS eval_sets (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS eval_items (
+    id               TEXT PRIMARY KEY,
+    set_id           TEXT NOT NULL,
+    position         INTEGER NOT NULL,
+    question         TEXT NOT NULL,
+    reference_answer TEXT NOT NULL DEFAULT '',
+    evidence         TEXT NOT NULL DEFAULT '[]',  -- JSON：能回答问题的原文片段
+    answerable       INTEGER NOT NULL DEFAULT 1,  -- 0 表示文档里没有答案，期望模型拒答
+    source           TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS eval_runs (
+    id          TEXT PRIMARY KEY,
+    set_id      TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    config      TEXT NOT NULL,             -- JSON：模型、裁判、指标、参数覆盖、实际生效的参数
+    status      TEXT NOT NULL,             -- running | done | failed | cancelled | interrupted
+    done        INTEGER NOT NULL DEFAULT 0,
+    total       INTEGER NOT NULL DEFAULT 0,
+    error       TEXT NOT NULL DEFAULT '',
+    summary     TEXT NOT NULL DEFAULT '{}',
+    created_at  TEXT NOT NULL,
+    finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS eval_results (
+    run_id   TEXT NOT NULL,
+    item_id  TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    data     TEXT NOT NULL,                -- JSON：回答、检索结果、各指标分数和裁判细节
+    PRIMARY KEY (run_id, item_id)
+);
 """
 
 

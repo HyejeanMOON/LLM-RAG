@@ -240,6 +240,110 @@ const json = (method: string, body?: unknown): RequestInit => ({
   body: body === undefined ? undefined : JSON.stringify(body),
 });
 
+// ---------- 评测 ----------
+
+export interface EvalMetricInfo {
+  key: string;
+  group: "retrieval" | "text" | "judge" | "system";
+  needs: string[];
+  lower_better: boolean;
+}
+export interface EvalItem {
+  id?: string;
+  question: string;
+  reference_answer: string;
+  evidence: string[];
+  answerable: boolean;
+  source?: string;
+}
+export interface EvalSetMeta {
+  id: string;
+  name: string;
+  created_at: string;
+  item_count: number;
+  run_count: number;
+}
+export interface EvalSet {
+  id: string;
+  name: string;
+  created_at: string;
+  items: EvalItem[];
+}
+export interface EvalRetrieved {
+  doc_name: string;
+  index: number;
+  score: number;
+  text: string;
+  covers: number[];
+}
+export interface EvalResult {
+  item_id: string;
+  question: string;
+  reference_answer: string;
+  evidence: string[];
+  answerable: boolean;
+  answer: string | null;
+  retrieved?: EvalRetrieved[];
+  scores: Record<string, number>;
+  details: Record<string, Record<string, unknown>>;
+  errors: Record<string, string>;
+  generation_ms?: number;
+}
+export interface EvalRunConfig {
+  metrics: string[];
+  provider: { id: string; name: string; model: string } | null;
+  judge: { id: string; name: string; model: string } | null;
+  overrides: Record<string, Record<string, unknown>>;
+  effective: {
+    query: QuerySettings;
+    retrieval: RetrievalParams;
+    context: ContextParams;
+    generation: GenerationSettings;
+    embedding: string;
+    index: IndexSettings;
+  };
+  match_threshold: number;
+}
+export interface EvalRun {
+  id: string;
+  set_id: string;
+  name: string;
+  config: EvalRunConfig;
+  status: "running" | "done" | "failed" | "cancelled" | "interrupted";
+  done: number;
+  total: number;
+  error: string;
+  summary: Record<string, { mean: number; n: number }> & { _errors?: number };
+  created_at: string;
+  finished_at: string | null;
+  results?: EvalResult[];
+}
+export interface EvalRunInput {
+  set_id: string;
+  name: string;
+  metrics: string[];
+  provider_id?: string;
+  judge_provider_id?: string;
+  overrides: Partial<Record<"query" | "retrieval" | "context" | "generation", unknown>>;
+  match_threshold: number;
+  concurrency: number;
+}
+export interface PairwiseResult {
+  run_a: { id: string; name: string };
+  run_b: { id: string; name: string };
+  judge: { name: string; model: string };
+  summary: { A: number; B: number; tie: number; errors: number; consistency: number };
+  results: {
+    question: string;
+    answer_a: string;
+    answer_b: string;
+    winner: "A" | "B" | "tie" | null;
+    consistent?: boolean;
+    rounds?: { order: string; winner: string; reason: string }[];
+    error?: string;
+  }[];
+}
+
 export const api = {
   health: () => request<Health>("/api/health"),
 
@@ -290,6 +394,24 @@ export const api = {
     const qs = new URLSearchParams(Object.entries(override ?? {}).filter(([, v]) => v) as [string, string][]).toString();
     return request<EmbeddingTestResult>(`/api/embedding/test${qs ? `?${qs}` : ""}`, json("POST", { texts }));
   },
+  // 评测
+  evalMetrics: () => request<EvalMetricInfo[]>("/api/eval/metrics"),
+  evalSets: () => request<EvalSetMeta[]>("/api/eval/sets"),
+  evalSet: (id: string) => request<EvalSet>(`/api/eval/sets/${id}`),
+  createEvalSet: (name: string, items: EvalItem[] = []) => request<EvalSet>("/api/eval/sets", json("POST", { name, items })),
+  createSampleEvalSet: () => request<EvalSet>("/api/eval/sets/sample", json("POST")),
+  updateEvalSet: (id: string, body: { name?: string; items?: EvalItem[] }) => request<EvalSet>(`/api/eval/sets/${id}`, json("PUT", body)),
+  deleteEvalSet: (id: string) => request<void>(`/api/eval/sets/${id}`, json("DELETE")),
+  exportEvalSet: (id: string) => request<{ name: string; items: EvalItem[] }>(`/api/eval/sets/${id}/export`),
+  generateEvalItems: (id: string, body: { provider_id?: string; n: number; n_unanswerable: number }) =>
+    request<EvalSet & { generated: number; errors: string[] }>(`/api/eval/sets/${id}/generate`, json("POST", body)),
+  evalRuns: (setId: string) => request<EvalRun[]>(`/api/eval/sets/${setId}/runs`),
+  evalRun: (id: string) => request<EvalRun>(`/api/eval/runs/${id}`),
+  startEvalRun: (body: EvalRunInput) => request<EvalRun>("/api/eval/runs", json("POST", body)),
+  cancelEvalRun: (id: string) => request<void>(`/api/eval/runs/${id}/cancel`, json("POST")),
+  deleteEvalRun: (id: string) => request<void>(`/api/eval/runs/${id}`, json("DELETE")),
+  pairwise: (run_a: string, run_b: string, judge_provider_id?: string) =>
+    request<PairwiseResult>("/api/eval/pairwise", json("POST", { run_a, run_b, judge_provider_id })),
 };
 
 export interface ChatHandlers {

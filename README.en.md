@@ -38,6 +38,7 @@ The UI is available in Chinese and English: use the switch at the bottom of the 
 | Retrieval | Vector (cosine / dot product / Euclidean), BM25 keyword, hybrid (RRF or weighted), cross-encoder rerank, MMR diversity, Top K, cosine threshold, in any combination |
 | Search lab | Compare up to 4 strategies side by side for the same question: each chunk shows cosine, dot, L2, BM25, hybrid, rerank and MMR scores plus its rank in the other strategies; make a strategy the Chat default in one click |
 | Chinese / English UI | Switch at the bottom of the sidebar. All pages, explanations, backend error messages and default prompts follow; the choice is remembered in the browser |
+| Evaluation | Test sets (sample / hand-written / LLM-generated / JSON import and export); retrieval metrics Hit Rate, Recall, Precision, MRR, MAP, NDCG; text metrics Exact Match, Token F1, BLEU, ROUGE-1/2/L, semantic similarity; LLM-judge metrics faithfulness, answer relevancy, context precision / recall / relevance, answer correctness, G-Eval, negative rejection, false refusal; compare runs side by side, read the judge's reasons per question, pairwise comparison with position swapping; every metric comes with its formula and an explanation |
 | RAG pipeline page | All parameters in pipeline order "chunking → embedding → index → query → retrieval → context → generation", each step with a "How it works" explanation; changing the first three prompts you to rebuild the index |
 
 ## Screenshots
@@ -202,6 +203,34 @@ Suggested experiments:
 - Remove "answer only from the sources" from the system prompt and ask something the documents don't cover to see whether the model makes things up;
 - On the Search lab page, put "Exact" and "HNSW, 5 candidates" in two columns and compare recall.
 
+## Evaluation
+
+The "📊 Evaluation" page scores the RAG system on a fixed set of questions. Change one parameter, run again, and compare side by side. The in-app "📖 Metric guide" has every metric's formula and explanation; this is the overview.
+
+**1. Prepare a test set** ("① Questions")
+
+- "Import sample set": 12 questions for the sample handbook (Chinese or English depending on the UI language), 2 of which the documents can't answer, to test refusals;
+- Add by hand: question, reference answer, evidence (sentences copied verbatim from the documents, one per line), and whether it's answerable;
+- "Generate questions from documents with an LLM": samples chunks and has the LLM write a question, reference answer and evidence; it can also write unanswerable questions. Review synthetic questions;
+- Import / export JSON: `{"name": "...", "items": [{"question", "reference_answer", "evidence": [...], "answerable"}]}`.
+
+Evidence is annotated as source text rather than chunk IDs, so annotations survive re-chunking and reindexing: a retrieved chunk covers a piece of evidence when their character-bigram overlap is ≥ the threshold (0.6 by default).
+
+**2. Run** ("② Run"): pick metrics, the answer model and the judge model, and optionally override retrieval / query / context parameters for this run only. Runs execute in the background with progress and can be cancelled.
+
+| Category | Metrics | Needs |
+|---|---|---|
+| Retrieval | Hit Rate@K, Recall@K, Precision@K, MRR, MAP@K, NDCG@K | Evidence; no LLM, free |
+| Text similarity | Exact Match, Token F1, BLEU-4, ROUGE-1 / 2 / L, semantic similarity (cosine with the current embedding model) | Reference answer + generated answer |
+| LLM judge | Faithfulness (split into statements, check each against the context), answer relevancy (generate questions from the answer, compare with the original), context precision / recall / relevance, answer correctness (F1 over TP/FP/FN + semantic similarity), G-Eval (rubric steps + 1–5 score), negative rejection, false refusal | A judge model; some need a reference answer |
+| System | Total latency, retrieval latency, context characters, answer characters | Recorded automatically |
+
+Selecting only retrieval metrics calls no LLM at all. The judge metrics follow [RAGAS](https://docs.ragas.io/) and G-Eval; the code is in `backend/app/evaluation/judge.py`, and the prompts are easy to read.
+
+**3. Results** ("③ Results"): one row per run, one column per metric, with the best value in each column in bold. Click a run name for per-question answers, retrieved chunks (marked with the evidence they cover) and the judge's verdicts. Tick two runs for a pairwise comparison: the judge sees each question twice with A/B swapped, and disagreement counts as a tie.
+
+Suggested experiments: compare vector / BM25 / hybrid and different Top K with retrieval metrics only (free); switch the embedding to the character hash and evaluate again; remove "answer only from the sources" from the prompt and watch faithfulness and negative rejection; compare BLEU / ROUGE with the judge scores; run a pairwise comparison between local Gemma 4 and Claude.
+
 ## Environment variables
 
 | Variable | Default | Description |
@@ -231,14 +260,16 @@ backend/
     embeddings.py        fastembed / OpenAI-compatible / hash embeddings
     store.py             Chroma vector store: write, delete, filter by document
     llm/                 Unified LLM interface: anthropic_provider.py, openai_provider.py
-    services/            Business logic: documents / providers / local_models (local model detection) / settings / rag
+    evaluation/          Evaluation metrics: metrics.py (retrieval / text), judge.py (LLM judge), testset.py (question generation)
+    services/            Business logic: documents / providers / local_models (local model detection) / settings / rag / evaluation
     routers/             HTTP endpoints
   tests/                 pytest (hash embeddings and a fake LLM; no network or keys needed)
-  sample_docs/           Sample documents (Chinese and English)
+  sample_docs/           Sample documents and sample test sets (Chinese and English)
 frontend/
   src/api.ts             API client + SSE parsing
   src/i18n.ts            Language switch: t("中文", "English")
-  src/pages/             ChatPage / DocumentsPage / SearchPage / PipelinePage / SettingsPage
+  src/pages/             ChatPage / DocumentsPage / SearchPage / PipelinePage / SettingsPage / eval/ (evaluation page)
+  src/evalMetrics.ts     Metric names, formulas and explanations
 ```
 
 ## API
@@ -260,6 +291,15 @@ frontend/
 | GET | `/api/embedding/models` | Common embedding models |
 | POST | `/api/embedding/test` | Embedding lab: `texts`; `backend` / `model` / `provider_id` can be overridden via query parameters |
 | GET | `/api/documents/tags` | All tags |
+| GET | `/api/eval/metrics` | Available evaluation metrics |
+| GET/POST | `/api/eval/sets` | List test sets / create or import (`name`, `items`) |
+| POST | `/api/eval/sets/sample` | Import the sample test set (language from Accept-Language) |
+| GET/PUT/DELETE | `/api/eval/sets/{id}` | Get / update (replaces `items`) / delete; `GET /{id}/export` exports |
+| POST | `/api/eval/sets/{id}/generate` | Generate questions with an LLM: `provider_id`, `n`, `n_unanswerable` |
+| GET | `/api/eval/sets/{id}/runs` | Runs of this test set (with metric means) |
+| POST | `/api/eval/runs` | Start a run (in the background): `set_id`, `name`, `metrics`, `provider_id`, `judge_provider_id`, `overrides` |
+| GET/DELETE | `/api/eval/runs/{id}` | Progress and per-question results / delete; `POST /{id}/cancel` cancels |
+| POST | `/api/eval/pairwise` | Pairwise comparison: `run_a`, `run_b`, `judge_provider_id` |
 
 Send `Accept-Language: en` to get English error messages and English default prompts; without it the API answers in Chinese.
 

@@ -1,0 +1,17 @@
+{
+  "name": "示例：星河员工手册",
+  "items": [
+    {"question": "出差住在上海每晚最多能报销多少？", "reference_answer": "上海属于一线城市，住宿每晚不超过 650 元。", "evidence": ["差旅住宿标准：一线城市（北京、上海、广州、深圳）每晚不超过 650 元"], "answerable": true},
+    {"question": "当年没休完的年假能留到什么时候？", "reference_answer": "可以顺延到次年 3 月 31 日，过期作废。", "evidence": ["当年未休完的年假可以顺延至次年 3 月 31 日，逾期作废"], "answerable": true},
+    {"question": "试用期员工每个月可以远程办公几天？", "reference_answer": "试用期员工每月最多远程办公 2 天。", "evidence": ["试用期员工每月远程办公上限为 2 天"], "answerable": true},
+    {"question": "公司的 CTO 是谁？", "reference_answer": "CTO 是周若溪。", "evidence": ["CTO 是周若溪"], "answerable": true},
+    {"question": "每年的学习基金有多少钱？", "reference_answer": "每位员工每年有 3000 元学习基金，可以买书、上网课或参加技术会议。", "evidence": ["每位员工每年有 3000 元的学习基金"], "answerable": true},
+    {"question": "单笔超过 5000 元的报销需要谁审批？", "reference_answer": "需要部门负责人和财务总监双重审批。", "evidence": ["单笔超过 5000 元的报销需要部门负责人和财务总监双重审批"], "answerable": true},
+    {"question": "绩效评级为 A 的员工，年终奖大约是几个月工资？", "reference_answer": "年终奖基准是 2 个月工资，A 档系数是 1.3，所以大约是 2.6 个月工资。", "evidence": ["年终奖通常在次年 2 月发放，基准为 2 个月工资", "S=1.8，A=1.3，B=1.0，C=0"], "answerable": true},
+    {"question": "发现疑似信息泄露应该怎么做？", "reference_answer": "在 1 小时内通过邮箱 security@xinghe.example 或内线 8110 上报安全团队。", "evidence": ["发现疑似信息泄露时，应在 1 小时内通过邮箱 security@xinghe.example 或内线 8110 上报安全团队"], "answerable": true},
+    {"question": "早上的班车几点、从哪里发车？", "reference_answer": "早上 8:30 和 9:00 各一班，从滨和路地铁站 B 出口发车。", "evidence": ["早上 8:30 和 9:00 各有一班从滨和路地铁站 B 出口发车"], "answerable": true},
+    {"question": "新员工入职后有导师吗？多久沟通一次？", "reference_answer": "有，会分配一位“领航员”导师，前三个月每周至少一对一沟通一次。", "evidence": ["新员工入职后会被分配一位“领航员”（导师），在前三个月内每周至少进行一次一对一沟通"], "answerable": true},
+    {"question": "公司的股票代码是多少？", "reference_answer": "", "evidence": [], "answerable": false},
+    {"question": "公司提供免费午餐吗？", "reference_answer": "", "evidence": [], "answerable": false}
+  ]
+}

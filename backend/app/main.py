@@ -12,15 +12,17 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config, db
 from .i18n import LanguageMiddleware
-from .routers import chat, documents, providers, system
+from .routers import chat, documents, evaluation, providers, system
 from .services import providers as provider_svc
 from .services import documents as document_svc
+from .services import evaluation as evaluation_svc
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init()
     provider_svc.seed_defaults()
+    evaluation_svc.mark_interrupted()
     if not document_svc.list_documents():
         sample = config.BASE_DIR / "sample_docs" / "xinghe_handbook.md"
         if sample.exists():
@@ -36,7 +38,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-for r in (documents.router, providers.router, chat.router, system.router):
+for r in (documents.router, providers.router, chat.router, system.router, evaluation.router):
     app.include_router(r)
 
 if config.FRONTEND_DIST.exists():

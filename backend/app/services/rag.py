@@ -85,12 +85,25 @@ def _apply_generation(cfg: ProviderConfig, gen) -> ProviderConfig:
 def run_pipeline(question: str, provider_id: str | None = None, history: list[dict] | None = None,
                  retrieval_overrides: dict | None = None, filters: dict | None = None) -> tuple[list[dict], dict, Iterator[str]]:
     """返回 (sources, trace, 回答的文本流)。sources 是最终放进提示词的参考片段。"""
+    p = prepare(question, provider_id, history, {"retrieval": retrieval_overrides or {}}, filters)
+    return p["sources"], p["trace"], create_llm(p["gen_cfg"]).stream(p["system"], p["messages"])
+
+
+def prepare(question: str, provider_id: str | None = None, history: list[dict] | None = None,
+            overrides: dict[str, dict] | None = None, filters: dict | None = None) -> dict:
+    """执行到“拼好提示词”为止（问题处理 → 过滤 → 检索 → 上下文组装）。
+
+    overrides 可以临时覆盖 query / retrieval / context / generation 各分组的参数（评测时对比不同配置用），
+    返回 hits（检索结果，按排名）、sources（组装后的参考资料）、trace、以及调用 LLM 需要的 gen_cfg / system / messages。
+    """
+    overrides = overrides or {}
+    retrieval_overrides = overrides.get("retrieval") or None
     t0 = time.perf_counter()
     timings = {}
     cfg = providers.get_config(provider_id)
-    qp = settings.section("query")
-    ctx = settings.section("context")
-    gen = settings.section("generation")
+    qp = settings.section("query", overrides.get("query"))
+    ctx = settings.section("context", overrides.get("context"))
+    gen = settings.section("generation", overrides.get("generation"))
     params = settings.retrieval_params(retrieval_overrides)
     history = _clean_history(history or [], qp.history_turns)
     trace: dict = {"question": question, "provider": f"{cfg.name}（{cfg.model}）"}
@@ -135,6 +148,5 @@ def run_pipeline(question: str, provider_id: str | None = None, history: list[di
     gen_cfg = _apply_generation(cfg, gen)
     trace["prompt"] = {"system": gen.system_prompt, "messages": messages, "llm_params": gen_cfg.extra}
     trace["timings"] = timings
-
-    stream = create_llm(gen_cfg).stream(gen.system_prompt, messages)
-    return sources, trace, stream
+    return {"hits": hits, "sources": sources, "trace": trace, "cfg": cfg, "gen_cfg": gen_cfg,
+            "system": gen.system_prompt, "messages": messages}

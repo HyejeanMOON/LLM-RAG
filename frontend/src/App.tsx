@@ -3,6 +3,7 @@ import { api, type Health } from "./api";
 import { getLang, setLang, t, type Lang } from "./i18n";
 import ChatPage from "./pages/ChatPage";
 import DocumentsPage from "./pages/DocumentsPage";
+import EvalPage from "./pages/eval/EvalPage";
 import PipelinePage from "./pages/PipelinePage";
 import SearchPage from "./pages/SearchPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -12,6 +13,7 @@ const TABS = [
   { key: "docs", label: () => t("📄 文档管理", "📄 Documents") },
   { key: "search", label: () => t("🔍 检索调试", "🔍 Search lab") },
   { key: "pipeline", label: () => t("🧪 RAG 流程", "🧪 RAG pipeline") },
+  { key: "eval", label: () => t("📊 评测", "📊 Evaluation") },
   { key: "settings", label: () => t("🤖 LLM 模型", "🤖 LLM models") },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];
@@ -114,6 +116,9 @@ export default function App() {
         </div>
         <div hidden={tab !== "pipeline"}>
           <PipelinePage version={version} onChanged={bump} />
+        </div>
+        <div hidden={tab !== "eval"}>
+          <EvalPage version={version} />
         </div>
         <div hidden={tab !== "settings"}>
           <SettingsPage version={version} onChanged={bump} />
